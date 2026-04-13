@@ -1,0 +1,31 @@
+#version 460 core
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shading_language_420pack : enable
+
+layout(set = 0, binding = 0) uniform texture2D uSourceTex;
+layout(set = 0, binding = 1) uniform sampler uSampler;
+layout(set = 0, binding = 2, rgba8) uniform image2D uDestImage;
+
+layout(push_constant, std430) uniform uPushConstant {
+    vec2 sourceSize;
+    vec2 destSize;
+};
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+void main() {
+    ivec2 destCoord = ivec2(gl_GlobalInvocationID.xy);
+    
+    if (destCoord.x >= int(destSize.x) || destCoord.y >= int(destSize.y)) {
+        return;
+    }
+    
+    // 计算在源纹理中的对应位置
+    vec2 uv = (vec2(destCoord) + 0.5) / destSize;
+    
+    // 使用双线性采样下采样
+    vec4 color = textureLod(sampler2D(uSourceTex, uSampler), uv, 0.0);
+    
+    // 写入目标纹理
+    imageStore(uDestImage, destCoord, color);
+}

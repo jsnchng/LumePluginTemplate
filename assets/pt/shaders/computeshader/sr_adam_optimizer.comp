@@ -1,0 +1,61 @@
+#version 460 core
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shading_language_420pack : enable
+
+// Adam优化器 - 更新纹理参数
+
+// 输入输出图像
+layout(set = 0, binding = 0, rgba8) uniform image2D uTexture;        // 当前纹理值 (RGBA8)
+layout(set = 0, binding = 1, rgba32f) uniform image2D uGradient;     // 梯度 (RGBA32F)
+layout(set = 0, binding = 2, rgba32f) uniform image2D uMomentum1;    // 一阶矩 (RGBA32F)
+layout(set = 0, binding = 3, rgba32f) uniform image2D uMomentum2;    // 二阶矩 (RGBA32F)
+
+// Push constant参数
+layout(push_constant, std430) uniform uPushConstant {
+    float learningRate;   // 学习率
+    float beta1;          // 一阶矩衰减率
+    float beta2;          // 二阶矩衰减率
+    float epsilon;        // 数值稳定性常数
+    int iteration;        // 当前迭代次数
+};
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+void main() {
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    
+    // 读取当前状态
+    vec4 value = imageLoad(uTexture, coord);
+    vec4 grad = imageLoad(uGradient, coord);
+    vec4 m1 = imageLoad(uMomentum1, coord);
+    vec4 m2 = imageLoad(uMomentum2, coord);
+    
+    // Adam更新公式
+    // m1 = beta1 * m1 + (1 - beta1) * grad
+    m1 = beta1 * m1 + (1.0 - beta1) * grad;
+    
+    // m2 = beta2 * m2 + (1 - beta2) * grad^2
+    m2 = beta2 * m2 + (1.0 - beta2) * (grad * grad);
+    
+    // 偏差修正
+    float biasCorrection1 = 1.0 - pow(beta1, float(iteration));
+    float biasCorrection2 = 1.0 - pow(beta2, float(iteration));
+    
+    vec4 m1_hat = m1 / biasCorrection1;
+    vec4 m2_hat = m2 / biasCorrection2;
+    
+    // 参数更新: theta = theta - lr * m1_hat / (sqrt(m2_hat) + epsilon)
+    vec4 update = learningRate * m1_hat / (sqrt(m2_hat) + vec4(epsilon));
+    value = value - update;
+    
+    // 钳制到有效范围 [0, 1]
+    value = clamp(value, 0.0, 1.0);
+    
+    // 写回结果
+    imageStore(uTexture, coord, value);
+    imageStore(uMomentum1, coord, m1);
+    imageStore(uMomentum2, coord, m2);
+    
+    // 清零梯度，为下一次迭代做准备
+    imageStore(uGradient, coord, vec4(0.0));
+}

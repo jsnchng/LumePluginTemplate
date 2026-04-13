@@ -1,26 +1,36 @@
 #include <3d/implementation_uids.h>  // CORE3D_NS::UID_3D_PLUGIN
 #include <core/intf_engine.h>  // IPluginRegister
+#include <core/io/intf_file_manager.h>
 #include <core/plugin/intf_plugin.h>
 #include <core/plugin/intf_plugin_decl.h>
 #include <plugintemplate/implementation_uids.h>
 #include <plugintemplate/namespace.h>
 #include <render/implementation_uids.h>  // RENDER_NS::UID_RENDER_PLUGIN
 #include <render/intf_plugin.h>  // IRenderPlugin
+#include <render/intf_render_context.h>
 
 #include <iostream>
 
 #include "render/node/render_node_default_material_deferred_shading.h"
+#include "render/node/render_node_sr_training.h"
 
 PT_BEGIN_NAMESPACE()
 const char* GetVersionInfo() { return "GIT_REVISION: cf4cfcb"; }
 
 CORE_NS::PluginToken CreatePluginPT(RENDER_NS::IRenderContext& context)
 {
+    CORE_NS::IFileManager& fileManager = context.GetEngine().GetFileManager();
+    fileManager.RegisterPath("pt", "assets://pt/", false);
+    fileManager.RegisterPath("ptshaders", "pt://shaders/", false);
     return &context;
 }
 
 void DestroyPluginPT(CORE_NS::PluginToken token)
 {
+    RENDER_NS::IRenderContext* context = static_cast<RENDER_NS::IRenderContext*>(token);
+    CORE_NS::IFileManager& fileManager = context->GetEngine().GetFileManager();
+    fileManager.UnregisterPath("pt", "assets://pt/");
+    fileManager.UnregisterPath("ptshaders", "pt://shaders/");
 }
 
 static constexpr RENDER_NS::IRenderPlugin RENDER_PLUGIN(CreatePluginPT, DestroyPluginPT);
@@ -39,8 +49,9 @@ constexpr auto FillRenderNodeTypeInfo()
         {}, {} };
 }
 
-constexpr RENDER_NS::RenderNodeTypeInfo PT_RENDER_NODE_TYPE_INFOS[1] = {
+constexpr RENDER_NS::RenderNodeTypeInfo PT_RENDER_NODE_TYPE_INFOS[2] = {
     FillRenderNodeTypeInfo<CORE3D_NS::RenderNodeMyDeferredShading>(),
+    FillRenderNodeTypeInfo<RENDER_NS::RenderNodeSRTraining>()
 };
 
 CORE_NS::PluginToken RegisterInterfaces(CORE_NS::IPluginRegister& pluginRegistry)

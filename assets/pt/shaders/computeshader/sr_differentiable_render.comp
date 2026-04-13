@@ -1,0 +1,265 @@
+#version 460 core
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shading_language_420pack : enable
+
+// ============================================================================
+// Super-Resolution Differentiable Render - Simplified PBR Version
+// ============================================================================
+
+// G-Buffer inputs (set 0, binding 0-4)
+layout(set = 0, binding = 0) uniform texture2D uDepthBuffer;
+layout(set = 0, binding = 1) uniform texture2D uNormalBuffer;
+layout(set = 0, binding = 2) uniform texture2D uMaterialBuffer;
+layout(set = 0, binding = 3) uniform texture2D uUVBuffer;
+layout(set = 0, binding = 4) uniform texture2D uBaseColorBuffer;  // For downsample init
+
+// LR texture (set 0, binding 5)
+layout(set = 0, binding = 5) uniform texture2D uLRTexture;
+
+// Sampler (set 0, binding 6)
+layout(set = 0, binding = 6) uniform sampler uSampler;
+
+// Output images (set 0, binding 7-8)
+layout(set = 0, binding = 7, rgba32f) uniform image2D uLRGradient;
+layout(set = 0, binding = 8, r32f) uniform image2D uLossOutput;
+
+// GT image (set 0, binding 9)
+layout(set = 0, binding = 9) uniform texture2D uGTImage;
+
+// Push Constants
+layout(push_constant, std430) uniform uPushConstant {
+    uint gtWidth;
+    uint gtHeight;
+    uint lrWidth;
+    uint lrHeight;
+    uint useUVBuffer;
+    float _pad0;
+    
+    // Light direction (view space)
+    vec3 lightDir;
+    float _pad1;
+    
+    // Light color
+    vec3 lightColor;
+    float lossScale;
+    
+    // Camera position (world space)
+    vec3 cameraPos;
+    float _pad2;
+    
+    // View-Projection Inverse matrix
+    mat4 viewProjInv;
+};
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// Constants
+#define PI 3.14159265359
+#define EPSILON 0.0001
+
+// ================================================================
+// Unpack G-Buffer data
+// ================================================================
+vec3 unpackNormal(vec4 normalData) {
+    // velocity_normal buffer: XY = velocity, ZW = encoded normal
+    // Normal is encoded in ZW, decode from [0,1] to [-1,1]
+    vec2 enc = normalData.zw * 2.0 - 1.0;
+    float z = sqrt(max(0.0, 1.0 - dot(enc, enc)));
+    return vec3(enc, z);
+}
+
+vec3 unpackMaterial(vec4 materialData) {
+    // material buffer: .x = roughness, .y = metallic, .z = ao
+    return materialData.rgb;
+}
+
+// ================================================================
+// World position from depth (CORRECT implementation)
+// ================================================================
+vec3 getWorldPos(vec2 uv, float depth) {
+    // NDC coordinates
+    vec4 ndc = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    
+    // Transform to world space using inverse view-projection matrix
+    vec4 world = viewProjInv * ndc;
+    
+    // Perspective divide
+    return world.xyz / world.w;
+}
+
+// ================================================================
+// Simplified PBR Forward
+// ================================================================
+vec3 pbrForwardSimplified(vec3 baseColor, vec3 N, float metallic, float roughness, 
+                          vec3 V, vec3 L, vec3 L_color) {
+    // BRDF parameters
+    vec3 f0 = mix(vec3(0.04), baseColor, metallic);
+    vec3 diffuseColor = baseColor * (1.0 - metallic);
+    
+    // Half vector
+    vec3 H = normalize(L + V);
+    float NoL = max(dot(N, L), 0.0);
+    float NoV = max(dot(N, V), EPSILON);
+    float NoH = max(dot(N, H), 0.0);
+    float VoH = max(dot(V, H), 0.0);
+    
+    // Diffuse (Lambert)
+    vec3 diffuse = diffuseColor / PI;
+    
+    // Specular (GGX simplified)
+    float alpha = roughness * roughness;
+    float alpha2 = alpha * alpha;
+    
+    // D (Normal Distribution Function)
+    float denom = NoH * NoH * (alpha2 - 1.0) + 1.0;
+    float D = alpha2 / (PI * denom * denom);
+    
+    // G (Geometry Function - simplified Schlick)
+    float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
+    float G1L = NoL / (NoL * (1.0 - k) + k);
+    float G1V = NoV / (NoV * (1.0 - k) + k);
+    float G = G1L * G1V;
+    
+    // F (Fresnel)
+    vec3 F = f0 + (1.0 - f0) * pow(1.0 - VoH, 5.0);
+    
+    // Specular
+    vec3 specular = D * G * F * 0.25;
+    
+    // Final color
+    return (diffuse + specular) * L_color * NoL;
+}
+
+// ================================================================
+// PBR Backward: d_loss / d_baseColor
+// ================================================================
+vec3 pbrBackwardSimplified(vec3 dL_dColor, vec3 baseColor, vec3 N, float metallic, 
+                            float roughness, vec3 V, vec3 L) {
+    // Recompute values needed for backward
+    vec3 H = normalize(L + V);
+    float NoL = max(dot(N, L), 0.0);
+    float NoV = max(dot(N, V), EPSILON);
+    float NoH = max(dot(N, H), 0.0);
+    float VoH = max(dot(V, H), 0.0);
+    
+    // D and G (same as forward)
+    float alpha = roughness * roughness;
+    float alpha2 = alpha * alpha;
+    float denom = NoH * NoH * (alpha2 - 1.0) + 1.0;
+    float D = alpha2 / (PI * denom * denom);
+    float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
+    float G1L = NoL / (NoL * (1.0 - k) + k);
+    float G1V = NoV / (NoV * (1.0 - k) + k);
+    float G = G1L * G1V;
+    
+    // d_diffuse / d_baseColor
+    vec3 d_diffuse = vec3((1.0 - metallic) / PI);
+    
+    // d_specular / d_baseColor
+    float d_F_d_baseColor_factor = metallic * (1.0 - pow(1.0 - VoH, 5.0));
+    vec3 d_specular = vec3(D * G * d_F_d_baseColor_factor * 0.25);
+    
+    // d_color / d_baseColor
+    vec3 d_color_d_baseColor = (d_diffuse + d_specular) * lightColor * NoL;
+    
+    // Chain rule
+    return dL_dColor * d_color_d_baseColor;
+}
+
+// ================================================================
+// Bilinear sampling and gradient accumulation
+// ================================================================
+void accumulateGradient(vec2 uv, vec4 dL_dBaseColor) {
+    vec2 texCoord = uv * vec2(lrWidth, lrHeight) - 0.5;
+    ivec2 texel00 = ivec2(floor(texCoord));
+    
+    vec2 f = fract(texCoord);
+    vec4 weights = vec4(
+        (1.0 - f.x) * (1.0 - f.y),
+        f.x * (1.0 - f.y),
+        (1.0 - f.x) * f.y,
+        f.x * f.y
+    );
+    
+    texel00 = clamp(texel00, ivec2(0), ivec2(lrWidth - 1, lrHeight - 1));
+    ivec2 texel10 = clamp(ivec2(texel00.x + 1, texel00.y), ivec2(0), ivec2(lrWidth - 1, lrHeight - 1));
+    ivec2 texel01 = clamp(ivec2(texel00.x, texel00.y + 1), ivec2(0), ivec2(lrWidth - 1, lrHeight - 1));
+    ivec2 texel11 = clamp(ivec2(texel00.x + 1, texel00.y + 1), ivec2(0), ivec2(lrWidth - 1, lrHeight - 1));
+    
+    // Read-modify-write (has race condition, but acceptable for prototype)
+    vec4 g00 = imageLoad(uLRGradient, texel00) + weights.x * dL_dBaseColor;
+    vec4 g10 = imageLoad(uLRGradient, texel10) + weights.y * dL_dBaseColor;
+    vec4 g01 = imageLoad(uLRGradient, texel01) + weights.z * dL_dBaseColor;
+    vec4 g11 = imageLoad(uLRGradient, texel11) + weights.w * dL_dBaseColor;
+    
+    imageStore(uLRGradient, texel00, g00);
+    imageStore(uLRGradient, texel10, g10);
+    imageStore(uLRGradient, texel01, g01);
+    imageStore(uLRGradient, texel11, g11);
+}
+
+// ================================================================
+// Main
+// ================================================================
+void main() {
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    
+    if (pixelCoord.x >= int(gtWidth) || pixelCoord.y >= int(gtHeight)) {
+        return;
+    }
+    
+    vec2 screenUV = (vec2(pixelCoord) + 0.5) / vec2(gtWidth, gtHeight);
+    
+    // Step 1: Read G-Buffer
+    float depth = textureLod(sampler2D(uDepthBuffer, uSampler), screenUV, 0.0).r;
+    vec4 normalData = textureLod(sampler2D(uNormalBuffer, uSampler), screenUV, 0.0);
+    vec4 materialData = textureLod(sampler2D(uMaterialBuffer, uSampler), screenUV, 0.0);
+    
+    // Skip background pixels
+    if (depth >= 1.0) {
+        return;
+    }
+    
+    vec3 N = unpackNormal(normalData);
+    vec3 material = unpackMaterial(materialData);
+    float roughness = material.x;
+    float metallic = material.y;
+    
+    // Step 2: Get UV for texture sampling
+    vec2 texUV;
+    if (useUVBuffer != 0u) {
+        vec4 uvData = textureLod(sampler2D(uUVBuffer, uSampler), screenUV, 0.0);
+        texUV = uvData.xy;
+    } else {
+        texUV = screenUV;
+    }
+    texUV = clamp(texUV, vec2(0.0), vec2(1.0));
+    
+    // Step 3: Sample LR texture (base color)
+    vec4 baseColorLR = textureLod(sampler2D(uLRTexture, uSampler), texUV, 0.0);
+    
+    // Step 4: Compute world position and view direction (CORRECT)
+    vec3 worldPos = getWorldPos(screenUV, depth);
+    vec3 V = normalize(cameraPos - worldPos);
+    
+    // Step 5: Forward PBR
+    vec3 predictedColor = pbrForwardSimplified(
+        baseColorLR.rgb, N, metallic, roughness, V, lightDir, lightColor);
+    
+    // Step 6: Read GT color
+    vec4 gtColor = textureLod(sampler2D(uGTImage, uSampler), screenUV, 0.0);
+    
+    // Step 7: Compute loss (MSE)
+    vec3 diff = predictedColor - gtColor.rgb;
+    float pixelLoss = dot(diff, diff);
+    imageStore(uLossOutput, pixelCoord, vec4(pixelLoss * lossScale, 0.0, 0.0, 0.0));
+    
+    // Step 8: Backward pass
+    vec3 dL_dPredicted = 2.0 * diff;
+    
+    vec3 dL_dBaseColor = pbrBackwardSimplified(
+        dL_dPredicted, baseColorLR.rgb, N, metallic, roughness, V, lightDir);
+    
+    // Step 9: Accumulate gradient
+    accumulateGradient(texUV, vec4(dL_dBaseColor, 0.0));
+}
