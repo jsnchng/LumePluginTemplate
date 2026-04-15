@@ -27,6 +27,7 @@
 #include <render/resource_handle.h>
 
 // #include "util/log.h"
+// Temporarily disable PLUGIN_LOG and CORE_LOG due to crash issue
 #define PLUGIN_LOG_I(...) do {} while (0)
 #define PLUGIN_LOG_W(...) do {} while (0)
 
