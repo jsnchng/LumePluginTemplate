@@ -5,6 +5,7 @@
 #include <core/plugin/intf_plugin_decl.h>
 #include <plugintemplate/implementation_uids.h>
 #include <plugintemplate/namespace.h>
+#include <render/device/intf_shader_manager.h>
 #include <render/implementation_uids.h>  // RENDER_NS::UID_RENDER_PLUGIN
 #include <render/intf_plugin.h>  // IRenderPlugin
 #include <render/intf_render_context.h>
@@ -17,11 +18,16 @@
 PT_BEGIN_NAMESPACE()
 const char* GetVersionInfo() { return "GIT_REVISION: cf4cfcb"; }
 
+static constexpr RENDER_NS::IShaderManager::ShaderFilePathDesc SHADER_FILE_PATHS {
+    "ptshaders://",
+};
+
 CORE_NS::PluginToken CreatePluginPT(RENDER_NS::IRenderContext& context)
 {
     CORE_NS::IFileManager& fileManager = context.GetEngine().GetFileManager();
     fileManager.RegisterPath("pt", "assets://pt/", false);
     fileManager.RegisterPath("ptshaders", "pt://shaders/", false);
+    context.GetDevice().GetShaderManager().LoadShaderFiles(SHADER_FILE_PATHS);
     return &context;
 }
 
