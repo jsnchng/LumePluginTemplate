@@ -164,6 +164,41 @@ void RenderNodeSRTraining::CreatePsos()
     
     constexpr uint32_t localSetIdx = 0U;
     
+    // prevent BindDescriptorSet crash by calling ResetAndReserve
+    DescriptorCounts totalCounts;
+    const auto& renderNodeUtil = renderNodeContextMgr_->GetRenderNodeUtil();
+    {
+        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/texture_downsample.shader");
+        if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
+            const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
+            const auto& counts = renderNodeUtil.GetDescriptorCounts(pl);
+            for (auto count : counts.counts) {
+                totalCounts.counts.push_back(count);
+            }
+        }
+    }
+    {
+        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/sr_differentiable_render.shader");
+        if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
+            const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
+            const auto& counts = renderNodeUtil.GetDescriptorCounts(pl);
+            for (auto count : counts.counts) {
+                totalCounts.counts.push_back(count);
+            }
+        }
+    }
+    {
+        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/sr_adam_optimizer.shader");
+        if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
+            const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
+            const auto& counts = renderNodeUtil.GetDescriptorCounts(pl);
+            for (auto count : counts.counts) {
+                totalCounts.counts.push_back(count);
+            }
+        }
+    }
+    dSetMgr.ResetAndReserve(totalCounts);
+
     // Load downsample shader (for LR texture initialization)
     {
         RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/texture_downsample.shader");
