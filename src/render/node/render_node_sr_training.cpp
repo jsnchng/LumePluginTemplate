@@ -15,6 +15,8 @@
 
 #include "render_node_sr_training.h"
 
+#include <3d/render/intf_render_data_store_default_material.h>
+#include <render/datastore/intf_render_data_store_manager.h>
 #include <render/device/intf_gpu_resource_manager.h>
 #include <render/device/intf_shader_manager.h>
 #include <render/nodecontext/intf_node_context_descriptor_set_manager.h>
@@ -154,7 +156,7 @@ void RenderNodeSRTraining::ParseJsonInputs()
     lrMomentum1_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_momentum1");
     lrMomentum2_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_momentum2");
     const auto& gpuResourceMgr = renderNodeContextMgr_->GetGpuResourceManager();
-    sampler_ = gpuResourceMgr.GetSamplerHandle("CORE_DEFAULT_SAMPLER_LINEAR_CLAMP");
+    sampler_ = gpuResourceMgr.GetSamplerHandle("CORE_DEFAULT_SAMPLER_LINEAR_MIPMAP_REPEAT"); // default sampler
 }
 
 void RenderNodeSRTraining::CreatePsos()
@@ -289,10 +291,26 @@ void RenderNodeSRTraining::DispatchDownsampleInit(IRenderCommandList& cmdList)
     
     cmdList.BindPipeline(psos_.downsample);
     
+    // Fetch base color texture from material 1
+    const auto& renderDataStoreMgr = renderNodeContextMgr_->GetRenderDataStoreManager();
+    const auto* dataStoreMaterial = static_cast<CORE3D_NS::IRenderDataStoreDefaultMaterial*>(
+        renderDataStoreMgr.GetRenderDataStore("RenderDataStoreDefaultMaterial"));
+    const auto& materialHandles = dataStoreMaterial->GetMaterialHandles();
+    const auto& handles = materialHandles[1];
+    const RenderHandle baseColorImage = handles.images[0];
+    const RenderHandle baseColorSampler = handles.samplers[0];
     // Bind: source=baseColorBuffer (G-Buffer), dest=lrTexture
     downsampleBinder_->ClearBindings();
-    downsampleBinder_->BindImage(0, baseColorBuffer_);
-    downsampleBinder_->BindSampler(1, sampler_);
+    if (!RenderHandleUtil::IsValid(baseColorImage)) {
+        downsampleBinder_->BindImage(0, baseColorBuffer_);
+    } else {
+        downsampleBinder_->BindImage(0, baseColorImage);
+    }
+    if (!RenderHandleUtil::IsValid(baseColorSampler)) {
+        downsampleBinder_->BindSampler(1, sampler_);
+    } else {
+        downsampleBinder_->BindSampler(1, baseColorSampler);
+    }
     downsampleBinder_->BindImage(2, lrTexture_);
     
     cmdList.UpdateDescriptorSet(downsampleBinder_->GetDescriptorSetHandle(),

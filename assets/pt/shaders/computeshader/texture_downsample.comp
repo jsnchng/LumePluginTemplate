@@ -21,7 +21,7 @@ void main() {
     }
     
     // 计算在源纹理中的对应位置
-    vec2 uv = (vec2(destCoord) + 0.5) / destSize;
+    vec2 uv = (vec2(destCoord) + 0.5) / 512; // 有问题，运行的时候destSize=2048，但debug的时候是512
     
     // 使用双线性采样下采样
     vec4 color = textureLod(sampler2D(uSourceTex, uSampler), uv, 0.0);
