@@ -95,6 +95,7 @@ target_compile_options(PluginLumePT PRIVATE /GR-)
 
 set(shader_compiler_executable "${CMAKE_BINARY_DIR}/LumeShaderCompiler.exe")
 set(argument_list)
+# Comment out next line for RenderDoc debugging
 list(APPEND argument_list "--optimize")
 list(APPEND argument_list "--source")
 list(APPEND argument_list "${CMAKE_CURRENT_SOURCE_DIR}/assets/pt/shaders")
