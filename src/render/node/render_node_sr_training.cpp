@@ -352,19 +352,24 @@ void RenderNodeSRTraining::DispatchDifferentiableRender(IRenderCommandList& cmdL
     cmdList.BindDescriptorSet(0U, differentiableRenderBinder_->GetDescriptorSetHandle());
     
     // Push constants (must match sr_differentiable_render.comp layout)
+    /**
+     * Note: Although Vulkan's maxPushConstantsSize is 256 bytes,
+     * the MAX_PUSH_CONSTANT_BYTE_SIZE is intentionally capped at 128 bytes,
+     * see line 39 of LumeRender/api/render/device/pipeline_layout_desc.h.
+     * Any data exceeding this limit will be TRUNCATED.
+     */
     struct PushConstantData {
         uint32_t gtWidth;
         uint32_t gtHeight;
         uint32_t lrWidth;
         uint32_t lrHeight;
-        uint32_t useUVBuffer;
-        float _pad0;
         
         // Light direction
         float lightDirX;
         float lightDirY;
         float lightDirZ;
-        float _pad1;
+        
+        uint32_t useUVBuffer;
         
         // Light color
         float lightColorR;
@@ -376,7 +381,7 @@ void RenderNodeSRTraining::DispatchDifferentiableRender(IRenderCommandList& cmdL
         float cameraPosX;
         float cameraPosY;
         float cameraPosZ;
-        float _pad2;
+        float _pad;
         
         // View-Projection Inverse matrix (row 0)
         float vpInv00;
@@ -408,12 +413,10 @@ void RenderNodeSRTraining::DispatchDifferentiableRender(IRenderCommandList& cmdL
     pc.lrWidth = config_.lrWidth;
     pc.lrHeight = config_.lrHeight;
     pc.useUVBuffer = RenderHandleUtil::IsValid(uvBuffer_) ? 1u : 0u;
-    pc._pad0 = 0.0f;
     
     pc.lightDirX = config_.lightDir.x;
     pc.lightDirY = config_.lightDir.y;
     pc.lightDirZ = config_.lightDir.z;
-    pc._pad1 = 0.0f;
     
     pc.lightColorR = config_.lightColor.x;
     pc.lightColorG = config_.lightColor.y;
@@ -423,7 +426,7 @@ void RenderNodeSRTraining::DispatchDifferentiableRender(IRenderCommandList& cmdL
     pc.cameraPosX = config_.cameraPos.x;
     pc.cameraPosY = config_.cameraPos.y;
     pc.cameraPosZ = config_.cameraPos.z;
-    pc._pad2 = 0.0f;
+    pc._pad = 0.0f;
     
     // View-Projection Inverse matrix
     pc.vpInv00 = config_.viewProjInv.data[0];

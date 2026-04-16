@@ -32,12 +32,11 @@ layout(push_constant, std430) uniform uPushConstant {
     uint gtHeight;
     uint lrWidth;
     uint lrHeight;
-    uint useUVBuffer;
-    float _pad0;
     
     // Light direction (view space)
     vec3 lightDir;
-    float _pad1;
+    
+    uint useUVBuffer;
     
     // Light color
     vec3 lightColor;
