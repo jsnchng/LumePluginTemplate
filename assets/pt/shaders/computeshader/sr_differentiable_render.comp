@@ -172,6 +172,8 @@ vec3 pbrBackwardSimplified(vec3 dL_dColor, vec3 baseColor, vec3 N, float metalli
 // Bilinear sampling and gradient accumulation
 // ================================================================
 void accumulateGradient(vec2 uv, vec4 dL_dBaseColor) {
+    uv = fract(uv); // Since sampler is on repeat mode
+
     vec2 texCoord = uv * vec2(lrWidth, lrHeight) - 0.5;
     ivec2 texel00 = ivec2(floor(texCoord));
     
@@ -198,6 +200,18 @@ void accumulateGradient(vec2 uv, vec4 dL_dBaseColor) {
     imageStore(uLRGradient, texel10, g10);
     imageStore(uLRGradient, texel01, g01);
     imageStore(uLRGradient, texel11, g11);
+}
+
+vec3 unlitForward(vec2 uv)
+{
+    vec2 texUv = textureLod(sampler2D(uUVBuffer, uSampler), uv, 0.0).xy;
+    return textureLod(sampler2D(uLRTexture, uSampler), texUv, 0.0).rgb;
+}
+
+void unlitBackward(vec2 uv, vec3 dL_dPredicted)
+{
+    vec2 texUv = textureLod(sampler2D(uUVBuffer, uSampler), uv, 0.0).xy;
+    accumulateGradient(texUv, vec4(dL_dPredicted, 0.0));
 }
 
 // ================================================================
@@ -247,7 +261,7 @@ void main() {
     // Step 5: Forward PBR
     vec3 predictedColor = pbrForwardSimplified(
         baseColorLR.rgb, N, metallic, roughness, V, lightDir, lightColor);
-    vec4 debugColor = vec4(predictedColor, 1.);
+    predictedColor = unlitForward(screenUV);
     
     // Step 6: Read GT color
     vec4 gtColor = textureLod(sampler2D(uGTImage, uSampler), screenUV, 0.0);
@@ -264,8 +278,10 @@ void main() {
         dL_dPredicted, baseColorLR.rgb, N, metallic, roughness, V, lightDir);
     
     // Step 9: Accumulate gradient
-    accumulateGradient(texUV, vec4(dL_dBaseColor, 0.0));
+    // accumulateGradient(texUV, vec4(dL_dBaseColor, 0.0));
+    unlitBackward(screenUV, dL_dPredicted);
 
     // Debug Output
+    vec4 debugColor = vec4(predictedColor, 1.0);
     imageStore(debugOutput, pixelCoord, debugColor);
 }
