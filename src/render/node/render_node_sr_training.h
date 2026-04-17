@@ -138,6 +138,9 @@ private:
     RenderHandle lrMomentum1_;
     RenderHandle lrMomentum2_;
 
+    // Debug Output
+    RenderHandle debugOutput_;
+
     // Pipeline handles
     struct PSOs {
         RenderHandle downsample;         // For LR texture initialization
