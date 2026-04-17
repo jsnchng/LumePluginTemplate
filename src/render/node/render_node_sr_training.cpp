@@ -155,6 +155,7 @@ void RenderNodeSRTraining::ParseJsonInputs()
     lossOutput_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "loss_output");
     lrMomentum1_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_momentum1");
     lrMomentum2_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_momentum2");
+    debugOutput_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "debugOutput");
     const auto& gpuResourceMgr = renderNodeContextMgr_->GetGpuResourceManager();
     sampler_ = gpuResourceMgr.GetSamplerHandle("CORE_DEFAULT_SAMPLER_LINEAR_MIPMAP_REPEAT"); // default sampler
 }
@@ -364,6 +365,7 @@ void RenderNodeSRTraining::DispatchDifferentiableRender(IRenderCommandList& cmdL
     differentiableRenderBinder_->BindImage(7, lrGradient_);
     differentiableRenderBinder_->BindImage(8, lossOutput_);
     differentiableRenderBinder_->BindImage(9, gtImage_);
+    differentiableRenderBinder_->BindImage(10, debugOutput_);
     
     cmdList.UpdateDescriptorSet(differentiableRenderBinder_->GetDescriptorSetHandle(),
                                  differentiableRenderBinder_->GetDescriptorSetLayoutBindingResources());
