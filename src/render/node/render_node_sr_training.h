@@ -63,7 +63,7 @@ public:
 
     // Configuration
     struct Config {
-        float learningRate = 0.01f;
+        float learningRate = 0.001f;
         float beta1 = 0.9f;
         float beta2 = 0.999f;
         float epsilon = 1e-8f;
