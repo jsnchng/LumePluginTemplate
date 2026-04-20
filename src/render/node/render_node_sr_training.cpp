@@ -264,9 +264,9 @@ void RenderNodeSRTraining::ExecuteFrame(IRenderCommandList& cmdList)
     }
     
     // Pass 0: Initialize LR texture (only once, on first frame)
+    DispatchDownsampleInit(cmdList);
+    cmdList.AddCustomBarrierPoint();
     if (!config_.initialized) {
-        DispatchDownsampleInit(cmdList);
-        cmdList.AddCustomBarrierPoint();
         config_.initialized = true;
         PLUGIN_LOG_I("RenderNodeSRTraining: LR texture initialized from GT base_color");
     }
@@ -313,6 +313,7 @@ void RenderNodeSRTraining::DispatchDownsampleInit(IRenderCommandList& cmdList)
         downsampleBinder_->BindSampler(1, baseColorSampler);
     }
     downsampleBinder_->BindImage(2, lrTexture_);
+    downsampleBinder_->BindImage(3, lrGradient_);
     
     cmdList.UpdateDescriptorSet(downsampleBinder_->GetDescriptorSetHandle(),
                                  downsampleBinder_->GetDescriptorSetLayoutBindingResources());
@@ -320,12 +321,12 @@ void RenderNodeSRTraining::DispatchDownsampleInit(IRenderCommandList& cmdList)
     
     // Push constants
     struct PushConstantData {
-        float sourceWidth;
+        float initialized;
         float sourceHeight;
         float destWidth;
         float destHeight;
     } pc;
-    pc.sourceWidth = static_cast<float>(config_.gtWidth);
+    pc.initialized = static_cast<float>(config_.initialized);
     pc.sourceHeight = static_cast<float>(config_.gtHeight);
     pc.destWidth = static_cast<float>(config_.lrWidth);
     pc.destHeight = static_cast<float>(config_.lrHeight);
