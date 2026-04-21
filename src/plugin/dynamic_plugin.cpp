@@ -12,7 +12,6 @@
 
 #include <iostream>
 
-#include "render/node/render_node_default_material_deferred_shading.h"
 #include "render/node/render_node_sr_training.h"
 
 PT_BEGIN_NAMESPACE()
@@ -56,8 +55,7 @@ constexpr auto FillRenderNodeTypeInfo()
 }
 
 constexpr RENDER_NS::RenderNodeTypeInfo PT_RENDER_NODE_TYPE_INFOS[2] = {
-    FillRenderNodeTypeInfo<CORE3D_NS::RenderNodeMyDeferredShading>(),
-    FillRenderNodeTypeInfo<RENDER_NS::RenderNodeSRTraining>()
+    FillRenderNodeTypeInfo<RENDER_NS::RenderNodeSRTraining>(),
 };
 
 CORE_NS::PluginToken RegisterInterfaces(CORE_NS::IPluginRegister& pluginRegistry)

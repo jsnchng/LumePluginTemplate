@@ -75,7 +75,6 @@ target_link_libraries(LumePTAPI INTERFACE
 #
 add_library(PluginLumePT SHARED
   ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/dynamic_plugin.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/render/node/render_node_default_material_deferred_shading.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/render/node/render_node_sr_training.cpp)
 add_library(LumePT::PluginLumePT ALIAS PluginLumePT)
 target_include_directories(PluginLumePT PRIVATE
