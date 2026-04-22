@@ -75,6 +75,7 @@ target_link_libraries(LumePTAPI INTERFACE
 #
 add_library(PluginLumePT SHARED
   ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/dynamic_plugin.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/render/node/render_node_sr_downsample_init.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/render/node/render_node_sr_training.cpp)
 add_library(LumePT::PluginLumePT ALIAS PluginLumePT)
 target_include_directories(PluginLumePT PRIVATE
@@ -95,7 +96,7 @@ target_compile_options(PluginLumePT PRIVATE /GR-)
 set(shader_compiler_executable "${CMAKE_BINARY_DIR}/LumeShaderCompiler.exe")
 set(argument_list)
 # Comment out next line for RenderDoc debugging
-list(APPEND argument_list "--optimize")
+# list(APPEND argument_list "--optimize")
 list(APPEND argument_list "--source")
 list(APPEND argument_list "${CMAKE_CURRENT_SOURCE_DIR}/assets/pt/shaders")
 list(APPEND argument_list "--include")

@@ -29,7 +29,7 @@ void main() {
         // 使用双线性采样下采样
         vec4 color = textureLod(sampler2D(uSourceTex, uSampler), uv, 0.0);
 
-        color = vec4(0.2, 0.2, 0.2, 1.);
+        // color = vec4(0.2, 0.2, 0.2, 1.);
 
         // 写入目标纹理
         imageStore(uDestImage, destCoord, color);
