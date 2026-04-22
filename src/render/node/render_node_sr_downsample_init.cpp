@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-#include "render_node_sr_training.h"
+#include "render_node_sr_downsample_init.h"
 
 #include <3d/render/intf_render_data_store_default_material.h>
 #include <render/datastore/intf_render_data_store_manager.h>
@@ -36,17 +36,17 @@
 using namespace BASE_NS;
 using namespace RENDER_NS;
 
-IRenderNode* RenderNodeSRTraining::Create()
+IRenderNode* RenderNodeSRDownsampleInit::Create()
 {
-    return new RenderNodeSRTraining;
+    return new RenderNodeSRDownsampleInit;
 }
 
-void RenderNodeSRTraining::Destroy(IRenderNode* instance)
+void RenderNodeSRDownsampleInit::Destroy(IRenderNode* instance)
 {
-    delete static_cast<RenderNodeSRTraining*>(instance);
+    delete static_cast<RenderNodeSRDownsampleInit*>(instance);
 }
 
-void RenderNodeSRTraining::InitNode(IRenderNodeContextManager& renderNodeContextMgr)
+void RenderNodeSRDownsampleInit::InitNode(IRenderNodeContextManager& renderNodeContextMgr)
 {
     renderNodeContextMgr_ = &renderNodeContextMgr;
     
@@ -57,15 +57,15 @@ void RenderNodeSRTraining::InitNode(IRenderNodeContextManager& renderNodeContext
     CreatePsos();
     
     valid_ = true;
-    PLUGIN_LOG_I("RenderNodeSRTraining: Initialized (Simplified PBR with Downsample Init)");
+    PLUGIN_LOG_I("RenderNodeSRDownsampleInit: Initialized (Simplified PBR with Downsample Init)");
 }
 
-void RenderNodeSRTraining::PreExecuteFrame()
+void RenderNodeSRDownsampleInit::PreExecuteFrame()
 {
     config_.iteration++;
 }
 
-void RenderNodeSRTraining::ParseJsonInputs()
+void RenderNodeSRDownsampleInit::ParseJsonInputs()
 {
     const auto& renderNodeUtil = renderNodeContextMgr_->GetRenderNodeUtil();
     const IRenderNodeParserUtil& parserUtil = renderNodeContextMgr_->GetRenderNodeParserUtil();
@@ -160,7 +160,7 @@ void RenderNodeSRTraining::ParseJsonInputs()
     sampler_ = gpuResourceMgr.GetSamplerHandle("CORE_DEFAULT_SAMPLER_LINEAR_MIPMAP_REPEAT"); // default sampler
 }
 
-void RenderNodeSRTraining::CreatePsos()
+void RenderNodeSRDownsampleInit::CreatePsos()
 {
     auto& shaderMgr = renderNodeContextMgr_->GetShaderManager();
     auto& psoMgr = renderNodeContextMgr_->GetPsoManager();
@@ -171,8 +171,18 @@ void RenderNodeSRTraining::CreatePsos()
     // prevent BindDescriptorSet crash by calling ResetAndReserve
     DescriptorCounts totalCounts;
     const auto& renderNodeUtil = renderNodeContextMgr_->GetRenderNodeUtil();
+    {
+        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/texture_downsample.shader");
+        if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
+            const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
+            const auto& counts = renderNodeUtil.GetDescriptorCounts(pl);
+            for (auto count : counts.counts) {
+                totalCounts.counts.push_back(count);
+            }
+        }
+    }
     // {
-        // RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/texture_downsample.shader");
+        // RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/sr_differentiable_render.shader");
         // if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
             // const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
             // const auto& counts = renderNodeUtil.GetDescriptorCounts(pl);
@@ -181,75 +191,65 @@ void RenderNodeSRTraining::CreatePsos()
             // }
         // }
     // }
-    {
-        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/sr_differentiable_render.shader");
-        if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
-            const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
-            const auto& counts = renderNodeUtil.GetDescriptorCounts(pl);
-            for (auto count : counts.counts) {
-                totalCounts.counts.push_back(count);
-            }
-        }
-    }
-    {
-        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/sr_adam_optimizer.shader");
-        if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
-            const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
-            const auto& counts = renderNodeUtil.GetDescriptorCounts(pl);
-            for (auto count : counts.counts) {
-                totalCounts.counts.push_back(count);
-            }
-        }
-    }
+    // {
+        // RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/sr_adam_optimizer.shader");
+        // if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
+            // const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
+            // const auto& counts = renderNodeUtil.GetDescriptorCounts(pl);
+            // for (auto count : counts.counts) {
+                // totalCounts.counts.push_back(count);
+            // }
+        // }
+    // }
     dSetMgr.ResetAndReserve(totalCounts);
 
     // Load downsample shader (for LR texture initialization)
+    {
+        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/texture_downsample.shader");
+        if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
+            const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
+            psos_.downsample = psoMgr.GetComputePsoHandle(shaderHandle, pl, {});
+            psos_.downsampleTGS = shaderMgr.GetReflectionThreadGroupSize(shaderHandle);
+            
+            const auto& binds = pl.descriptorSetLayouts[localSetIdx].bindings;
+            downsampleBinder_ = dSetMgr.CreateDescriptorSetBinder(dSetMgr.CreateDescriptorSet(binds), binds);
+            
+            PLUGIN_LOG_I("RenderNodeSRDownsampleInit: Downsample shader loaded");
+        }
+    }
+    
+    // Load differentiable render shader
     // {
-        // RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/texture_downsample.shader");
+        // RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/sr_differentiable_render.shader");
         // if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
             // const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
-            // psos_.downsample = psoMgr.GetComputePsoHandle(shaderHandle, pl, {});
-            // psos_.downsampleTGS = shaderMgr.GetReflectionThreadGroupSize(shaderHandle);
+            // psos_.differentiableRender = psoMgr.GetComputePsoHandle(shaderHandle, pl, {});
+            // psos_.differentiableRenderTGS = shaderMgr.GetReflectionThreadGroupSize(shaderHandle);
             
             // const auto& binds = pl.descriptorSetLayouts[localSetIdx].bindings;
-            // downsampleBinder_ = dSetMgr.CreateDescriptorSetBinder(dSetMgr.CreateDescriptorSet(binds), binds);
+            // differentiableRenderBinder_ = dSetMgr.CreateDescriptorSetBinder(dSetMgr.CreateDescriptorSet(binds), binds);
             
-            // PLUGIN_LOG_I("RenderNodeSRTraining: Downsample shader loaded");
+            // PLUGIN_LOG_I("RenderNodeSRDownsampleInit: Differentiable render shader loaded");
         // }
     // }
     
-    // Load differentiable render shader
-    {
-        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/sr_differentiable_render.shader");
-        if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
-            const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
-            psos_.differentiableRender = psoMgr.GetComputePsoHandle(shaderHandle, pl, {});
-            psos_.differentiableRenderTGS = shaderMgr.GetReflectionThreadGroupSize(shaderHandle);
-            
-            const auto& binds = pl.descriptorSetLayouts[localSetIdx].bindings;
-            differentiableRenderBinder_ = dSetMgr.CreateDescriptorSetBinder(dSetMgr.CreateDescriptorSet(binds), binds);
-            
-            PLUGIN_LOG_I("RenderNodeSRTraining: Differentiable render shader loaded");
-        }
-    }
-    
     // Load adam optimizer shader
-    {
-        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/sr_adam_optimizer.shader");
-        if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
-            const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
-            psos_.adamOptimizer = psoMgr.GetComputePsoHandle(shaderHandle, pl, {});
-            psos_.adamTGS = shaderMgr.GetReflectionThreadGroupSize(shaderHandle);
+    // {
+        // RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/sr_adam_optimizer.shader");
+        // if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
+            // const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
+            // psos_.adamOptimizer = psoMgr.GetComputePsoHandle(shaderHandle, pl, {});
+            // psos_.adamTGS = shaderMgr.GetReflectionThreadGroupSize(shaderHandle);
             
-            const auto& binds = pl.descriptorSetLayouts[localSetIdx].bindings;
-            adamBinder_ = dSetMgr.CreateDescriptorSetBinder(dSetMgr.CreateDescriptorSet(binds), binds);
+            // const auto& binds = pl.descriptorSetLayouts[localSetIdx].bindings;
+            // adamBinder_ = dSetMgr.CreateDescriptorSetBinder(dSetMgr.CreateDescriptorSet(binds), binds);
             
-            PLUGIN_LOG_I("RenderNodeSRTraining: Adam optimizer shader loaded");
-        }
-    }
+            // PLUGIN_LOG_I("RenderNodeSRDownsampleInit: Adam optimizer shader loaded");
+        // }
+    // }
 }
 
-void RenderNodeSRTraining::ExecuteFrame(IRenderCommandList& cmdList)
+void RenderNodeSRDownsampleInit::ExecuteFrame(IRenderCommandList& cmdList)
 {
     if (!valid_ || !config_.enabled) {
         return;
@@ -259,34 +259,34 @@ void RenderNodeSRTraining::ExecuteFrame(IRenderCommandList& cmdList)
     if (!RenderHandleUtil::IsValid(depthBuffer_) || !RenderHandleUtil::IsValid(normalBuffer_) ||
         !RenderHandleUtil::IsValid(materialBuffer_) || !RenderHandleUtil::IsValid(lrTexture_) ||
         !RenderHandleUtil::IsValid(lrGradient_) || !RenderHandleUtil::IsValid(gtImage_)) {
-        PLUGIN_LOG_W("RenderNodeSRTraining: Missing resources, skipping frame");
+        PLUGIN_LOG_W("RenderNodeSRDownsampleInit: Missing resources, skipping frame");
         return;
     }
     
     // Pass 0: Initialize LR texture (only once, on first frame)
-    // DispatchDownsampleInit(cmdList);
-    // cmdList.AddCustomBarrierPoint();
-    // if (!config_.initialized) {
-        // config_.initialized = true;
-        // PLUGIN_LOG_I("RenderNodeSRTraining: LR texture initialized from GT base_color");
-    // }
+    DispatchDownsampleInit(cmdList);
+    cmdList.AddCustomBarrierPoint();
+    if (!config_.initialized) {
+        config_.initialized = true;
+        PLUGIN_LOG_I("RenderNodeSRDownsampleInit: LR texture initialized from GT base_color");
+    }
     
     // Pass 1: Clear gradient buffer
-    DispatchClearGradient(cmdList);
-    cmdList.AddCustomBarrierPoint();
+    // DispatchClearGradient(cmdList);
+    // cmdList.AddCustomBarrierPoint();
     
     // Pass 2: Differentiable render (forward + loss + backward)
-    DispatchDifferentiableRender(cmdList);
-    cmdList.AddCustomBarrierPoint();
+    // DispatchDifferentiableRender(cmdList);
+    // cmdList.AddCustomBarrierPoint();
     
     // Pass 3: Adam optimizer update
-    DispatchAdamOptimizer(cmdList);
+    // DispatchAdamOptimizer(cmdList);
 }
 
-void RenderNodeSRTraining::DispatchDownsampleInit(IRenderCommandList& cmdList)
+void RenderNodeSRDownsampleInit::DispatchDownsampleInit(IRenderCommandList& cmdList)
 {
     if (!RenderHandleUtil::IsValid(psos_.downsample) || !RenderHandleUtil::IsValid(baseColorBuffer_)) {
-        PLUGIN_LOG_W("RenderNodeSRTraining: Cannot initialize LR texture - missing downsample PSO or base_color");
+        PLUGIN_LOG_W("RenderNodeSRDownsampleInit: Cannot initialize LR texture - missing downsample PSO or base_color");
         return;
     }
     
@@ -340,14 +340,14 @@ void RenderNodeSRTraining::DispatchDownsampleInit(IRenderCommandList& cmdList)
     cmdList.Dispatch(groupX, groupY, 1);
 }
 
-void RenderNodeSRTraining::DispatchClearGradient(IRenderCommandList& cmdList)
+void RenderNodeSRDownsampleInit::DispatchClearGradient(IRenderCommandList& cmdList)
 {
     // Gradient buffer is cleared by Adam optimizer at the end of each iteration
     // (see sr_adam_optimizer.comp: imageStore(uGradient, coord, vec4(0.0)))
     // No separate clear pass needed - Adam clears after using the gradient
 }
 
-void RenderNodeSRTraining::DispatchDifferentiableRender(IRenderCommandList& cmdList)
+void RenderNodeSRDownsampleInit::DispatchDifferentiableRender(IRenderCommandList& cmdList)
 {
     if (!RenderHandleUtil::IsValid(psos_.differentiableRender)) {
         return;
@@ -475,7 +475,7 @@ void RenderNodeSRTraining::DispatchDifferentiableRender(IRenderCommandList& cmdL
     cmdList.Dispatch(groupX, groupY, 1);
 }
 
-void RenderNodeSRTraining::DispatchAdamOptimizer(IRenderCommandList& cmdList)
+void RenderNodeSRDownsampleInit::DispatchAdamOptimizer(IRenderCommandList& cmdList)
 {
     if (!RenderHandleUtil::IsValid(psos_.adamOptimizer)) {
         return;
