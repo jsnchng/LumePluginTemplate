@@ -141,6 +141,12 @@ private:
     // Debug Output
     RenderHandle debugOutput_;
 
+    // Predicted Base Color
+    RenderHandle predictedBaseColor_;
+
+    // dL_dBaseColor
+    RenderHandle dL_dBaseColor_;
+
     // Pipeline handles
     struct PSOs {
         RenderHandle downsample;         // For LR texture initialization

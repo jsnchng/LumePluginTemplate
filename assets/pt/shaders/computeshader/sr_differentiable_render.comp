@@ -29,6 +29,12 @@ layout(set = 0, binding = 9) uniform texture2D uGTImage;
 // Debug Output (set 0, binding 10)
 layout(set = 0, binding = 10, rgba32f) uniform image2D debugOutput;
 
+// Predicted Base Color (set 0, binding 11)
+layout(set = 0, binding = 11, r11f_g11f_b10f) uniform image2D predictedBaseColor;
+
+// dL_dBaseColor (set 0, binding 12)
+layout(set = 0, binding = 12, r11f_g11f_b10f) uniform image2D dL_dBaseColor_buffer;
+
 // Push Constants
 layout(push_constant, std430) uniform uPushConstant {
     uint gtWidth;
@@ -202,18 +208,6 @@ void accumulateGradient(vec2 uv, vec4 dL_dBaseColor) {
     imageStore(uLRGradient, texel11, g11);
 }
 
-vec3 unlitForward(vec2 uv)
-{
-    vec2 texUv = textureLod(sampler2D(uUVBuffer, uSampler), uv, 0.0).xy;
-    return textureLod(sampler2D(uLRTexture, uSampler), texUv, 0.0).rgb;
-}
-
-void unlitBackward(vec2 uv, vec3 dL_dPredicted)
-{
-    vec2 texUv = textureLod(sampler2D(uUVBuffer, uSampler), uv, 0.0).xy;
-    accumulateGradient(texUv, vec4(dL_dPredicted, 0.0));
-}
-
 // ================================================================
 // Main
 // ================================================================
@@ -261,7 +255,6 @@ void main() {
     // Step 5: Forward PBR
     vec3 predictedColor = pbrForwardSimplified(
         baseColorLR.rgb, N, metallic, roughness, V, lightDir, lightColor);
-    predictedColor = unlitForward(screenUV);
     
     // Step 6: Read GT color
     vec4 gtColor = textureLod(sampler2D(uGTImage, uSampler), screenUV, 0.0);
@@ -273,15 +266,16 @@ void main() {
     
     // Step 8: Backward pass
     vec3 dL_dPredicted = 2.0 * diff;
-    
-    vec3 dL_dBaseColor = pbrBackwardSimplified(
-        dL_dPredicted, baseColorLR.rgb, N, metallic, roughness, V, lightDir);
-    
+
+    // 我们将反向传播提前到deferred shading阶段，并直接将结果存入缓冲区
+    vec3 dL_dBaseColor = imageLoad(dL_dBaseColor_buffer, pixelCoord).rgb;
+
     // Step 9: Accumulate gradient
-    // accumulateGradient(texUV, vec4(dL_dBaseColor, 0.0));
-    unlitBackward(screenUV, dL_dPredicted);
+    // 由于我们把反向传播提前了，所以直接把dL_dBaseColor累加到对应的texel即可
+    accumulateGradient(texUV, vec4(dL_dBaseColor, 0.0));
 
     // Debug Output
-    vec4 debugColor = vec4(predictedColor, 1.0);
+    vec3 testColor = imageLoad(predictedBaseColor, pixelCoord).rgb;
+    vec4 debugColor = vec4(testColor, 1.0);
     imageStore(debugOutput, pixelCoord, debugColor);
 }
