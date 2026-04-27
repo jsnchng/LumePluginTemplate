@@ -29,19 +29,10 @@ class IRenderCommandList;
 class IRenderNodeContextManager;
 
 // ============================================================================
-// Super-Resolution Differentiable Rendering Training Node
+// Downsample Init Node
 // ============================================================================
 // Passes:
 //   Pass 0: Downsample GT → LR (only on first frame, initializes LR texture)
-//   Pass 1: Clear Gradient Buffer (every frame)
-//   Pass 2: Differentiable Render (forward + loss + backward)
-//   Pass 3: Adam Optimizer (update LR texture)
-//
-// Simplified PBR:
-//   - Only optimize base_color texture
-//   - Fixed material params from G-Buffer
-//   - Single directional light
-//   - No shadows, fog, or indirect lighting
 // ============================================================================
 class RenderNodeSRDownsampleInit final : public IRenderNode {
 public:
@@ -54,7 +45,7 @@ public:
     ~RenderNodeSRDownsampleInit() override = default;
 
     void InitNode(IRenderNodeContextManager& renderNodeContextMgr) override;
-    void PreExecuteFrame() override;
+    void PreExecuteFrame() override {};
     void ExecuteFrame(IRenderCommandList& cmdList) override;
     ExecuteFlags GetExecuteFlags() const override { return 0U; }
 
@@ -63,26 +54,12 @@ public:
 
     // Configuration
     struct Config {
-        float learningRate = 0.003f;
-        float beta1 = 0.9f;
-        float beta2 = 0.999f;
-        float epsilon = 1e-8f;
-        uint32_t iteration = 0;
         uint32_t gtWidth = 1024;
         uint32_t gtHeight = 1024;
         uint32_t lrWidth = 512;
         uint32_t lrHeight = 512;
-        float lossScale = 1.0f;
         bool enabled = true;
         bool initialized = false;  // Track if LR texture has been initialized
-        
-        // Light parameters (should be from scene data)
-        BASE_NS::Math::Vec3 lightDir { 0.0f, 1.0f, 0.0f };
-        BASE_NS::Math::Vec3 lightColor { 1.0f, 1.0f, 1.0f };
-        
-        // Camera parameters (should be from camera data)
-        BASE_NS::Math::Vec3 cameraPos { 0.0f, 0.0f, 3.0f };
-        BASE_NS::Math::Mat4X4 viewProjInv;  // For world position calculation
     };
 
     void SetConfig(const Config& config) { config_ = config; }
@@ -96,9 +73,6 @@ private:
     void DispatchDownsampleInit(IRenderCommandList& cmdList);
     
     // Per-frame passes
-    void DispatchClearGradient(IRenderCommandList& cmdList);
-    void DispatchDifferentiableRender(IRenderCommandList& cmdList);
-    void DispatchAdamOptimizer(IRenderCommandList& cmdList);
 
     IRenderNodeContextManager* renderNodeContextMgr_ { nullptr };
 
@@ -115,48 +89,27 @@ private:
     RenderNodeHandles::InputResources imageResources_;
 
     // G-Buffer handles
-    RenderHandle depthBuffer_;
-    RenderHandle normalBuffer_;
-    RenderHandle materialBuffer_;
-    RenderHandle uvBuffer_;
     RenderHandle baseColorBuffer_;  // G-Buffer base color (for downsample init)
     
     // LR texture (base color to optimize)
     RenderHandle lrTexture_;
     
-    // GT image (rendered result from deferred shading)
-    RenderHandle gtImage_;
-    
     // Sampler
     RenderHandle sampler_;
     
-    // Gradient and loss
+    // Gradient
     RenderHandle lrGradient_;
-    RenderHandle lossOutput_;
-    
-    // Adam optimizer
-    RenderHandle lrMomentum1_;
-    RenderHandle lrMomentum2_;
-
-    // Debug Output
-    RenderHandle debugOutput_;
 
     // Pipeline handles
     struct PSOs {
         RenderHandle downsample;         // For LR texture initialization
-        RenderHandle differentiableRender;
-        RenderHandle adamOptimizer;
 
         ShaderThreadGroup downsampleTGS { 8, 8, 1 };
-        ShaderThreadGroup differentiableRenderTGS { 8, 8, 1 };
-        ShaderThreadGroup adamTGS { 8, 8, 1 };
     };
     PSOs psos_;
 
     // Descriptor set binders
     IDescriptorSetBinder::Ptr downsampleBinder_;
-    IDescriptorSetBinder::Ptr differentiableRenderBinder_;
-    IDescriptorSetBinder::Ptr adamBinder_;
 
     bool valid_ { false };
 };

@@ -28,10 +28,6 @@
 #include <render/nodecontext/intf_render_node_util.h>
 #include <render/resource_handle.h>
 
-// #include "util/log.h"
-// Temporarily disable PLUGIN_LOG and CORE_LOG due to crash issue
-#define PLUGIN_LOG_I(...) do {} while (0)
-#define PLUGIN_LOG_W(...) do {} while (0)
 
 using namespace BASE_NS;
 using namespace RENDER_NS;
@@ -50,19 +46,10 @@ void RenderNodeSRDownsampleInit::InitNode(IRenderNodeContextManager& renderNodeC
 {
     renderNodeContextMgr_ = &renderNodeContextMgr;
     
-    // Initialize viewProjInv to identity
-    config_.viewProjInv = Math::Mat4X4(1.0f);
-    
     ParseJsonInputs();
     CreatePsos();
     
     valid_ = true;
-    PLUGIN_LOG_I("RenderNodeSRDownsampleInit: Initialized (Simplified PBR with Downsample Init)");
-}
-
-void RenderNodeSRDownsampleInit::PreExecuteFrame()
-{
-    config_.iteration++;
 }
 
 void RenderNodeSRDownsampleInit::ParseJsonInputs()
@@ -77,33 +64,13 @@ void RenderNodeSRDownsampleInit::ParseJsonInputs()
     for (size_t i = 0; i < jsonInputs_.resources.images.size(); ++i) {
         const auto& res = jsonInputs_.resources.images[i];
         
-        if (res.name == "depthBuffer" || res.name == "uDepthBuffer") {
-            if (i < inputResources_.images.size()) {
-                depthBuffer_ = inputResources_.images[i].handle;
-            }
-        } else if (res.name == "normalBuffer" || res.name == "uNormalBuffer") {
-            if (i < inputResources_.images.size()) {
-                normalBuffer_ = inputResources_.images[i].handle;
-            }
-        } else if (res.name == "materialBuffer" || res.name == "uMaterialBuffer") {
-            if (i < inputResources_.images.size()) {
-                materialBuffer_ = inputResources_.images[i].handle;
-            }
-        } else if (res.name == "uvBuffer" || res.name == "uUVBuffer") {
-            if (i < inputResources_.images.size()) {
-                uvBuffer_ = inputResources_.images[i].handle;
-            }
-        } else if (res.name == "baseColorBuffer" || res.name == "uBaseColorBuffer") {
+        if (res.name == "baseColorBuffer" || res.name == "uBaseColorBuffer") {
             if (i < inputResources_.images.size()) {
                 baseColorBuffer_ = inputResources_.images[i].handle;
             }
         } else if (res.name == "lrTexture" || res.name == "uLRTexture") {
             if (i < inputResources_.images.size()) {
                 lrTexture_ = inputResources_.images[i].handle;
-            }
-        } else if (res.name == "gtImage" || res.name == "uGTImage") {
-            if (i < inputResources_.images.size()) {
-                gtImage_ = inputResources_.images[i].handle;
             }
         }
     }
@@ -127,35 +94,14 @@ void RenderNodeSRDownsampleInit::ParseJsonInputs()
             if (i < imageResources_.images.size()) {
                 lrGradient_ = imageResources_.images[i].handle;
             }
-        } else if (img.name == "lossOutput" || img.name == "uLossOutput") {
-            if (i < imageResources_.images.size()) {
-                lossOutput_ = imageResources_.images[i].handle;
-            }
-        } else if (img.name == "lrMomentum1" || img.name == "momentum1") {
-            if (i < imageResources_.images.size()) {
-                lrMomentum1_ = imageResources_.images[i].handle;
-            }
-        } else if (img.name == "lrMomentum2" || img.name == "momentum2") {
-            if (i < imageResources_.images.size()) {
-                lrMomentum2_ = imageResources_.images[i].handle;
-            }
         }
     }
 
 	// Obtain valid handles from GPU images created by previous nodes.
     IRenderNodeGraphShareManager& rngShareMgr = renderNodeContextMgr_->GetRenderNodeGraphShareManager();
-    depthBuffer_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateDefaultCameraGpuImages", "depth");
-    normalBuffer_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateDefaultCameraGpuImages", "velocity_normal");
-    materialBuffer_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateDefaultCameraGpuImages", "material");
-    uvBuffer_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateDefaultCameraGpuImages", "uv");
     baseColorBuffer_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateDefaultCameraGpuImages", "base_color");
-    gtImage_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateDefaultCameraGpuImages", "color");
     lrTexture_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_texture");
     lrGradient_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_gradient");
-    lossOutput_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "loss_output");
-    lrMomentum1_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_momentum1");
-    lrMomentum2_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_momentum2");
-    debugOutput_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "debugOutput");
     const auto& gpuResourceMgr = renderNodeContextMgr_->GetGpuResourceManager();
     sampler_ = gpuResourceMgr.GetSamplerHandle("CORE_DEFAULT_SAMPLER_LINEAR_MIPMAP_REPEAT"); // default sampler
 }
@@ -172,7 +118,7 @@ void RenderNodeSRDownsampleInit::CreatePsos()
     DescriptorCounts totalCounts;
     const auto& renderNodeUtil = renderNodeContextMgr_->GetRenderNodeUtil();
     {
-        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/texture_downsample.shader");
+        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/sr_downsample_init.shader");
         if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
             const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
             const auto& counts = renderNodeUtil.GetDescriptorCounts(pl);
@@ -181,31 +127,11 @@ void RenderNodeSRDownsampleInit::CreatePsos()
             }
         }
     }
-    // {
-        // RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/sr_differentiable_render.shader");
-        // if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
-            // const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
-            // const auto& counts = renderNodeUtil.GetDescriptorCounts(pl);
-            // for (auto count : counts.counts) {
-                // totalCounts.counts.push_back(count);
-            // }
-        // }
-    // }
-    // {
-        // RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/sr_adam_optimizer.shader");
-        // if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
-            // const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
-            // const auto& counts = renderNodeUtil.GetDescriptorCounts(pl);
-            // for (auto count : counts.counts) {
-                // totalCounts.counts.push_back(count);
-            // }
-        // }
-    // }
     dSetMgr.ResetAndReserve(totalCounts);
 
     // Load downsample shader (for LR texture initialization)
     {
-        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/texture_downsample.shader");
+        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/sr_downsample_init.shader");
         if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
             const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
             psos_.downsample = psoMgr.GetComputePsoHandle(shaderHandle, pl, {});
@@ -213,40 +139,8 @@ void RenderNodeSRDownsampleInit::CreatePsos()
             
             const auto& binds = pl.descriptorSetLayouts[localSetIdx].bindings;
             downsampleBinder_ = dSetMgr.CreateDescriptorSetBinder(dSetMgr.CreateDescriptorSet(binds), binds);
-            
-            PLUGIN_LOG_I("RenderNodeSRDownsampleInit: Downsample shader loaded");
         }
     }
-    
-    // Load differentiable render shader
-    // {
-        // RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/sr_differentiable_render.shader");
-        // if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
-            // const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
-            // psos_.differentiableRender = psoMgr.GetComputePsoHandle(shaderHandle, pl, {});
-            // psos_.differentiableRenderTGS = shaderMgr.GetReflectionThreadGroupSize(shaderHandle);
-            
-            // const auto& binds = pl.descriptorSetLayouts[localSetIdx].bindings;
-            // differentiableRenderBinder_ = dSetMgr.CreateDescriptorSetBinder(dSetMgr.CreateDescriptorSet(binds), binds);
-            
-            // PLUGIN_LOG_I("RenderNodeSRDownsampleInit: Differentiable render shader loaded");
-        // }
-    // }
-    
-    // Load adam optimizer shader
-    // {
-        // RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/sr_adam_optimizer.shader");
-        // if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
-            // const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
-            // psos_.adamOptimizer = psoMgr.GetComputePsoHandle(shaderHandle, pl, {});
-            // psos_.adamTGS = shaderMgr.GetReflectionThreadGroupSize(shaderHandle);
-            
-            // const auto& binds = pl.descriptorSetLayouts[localSetIdx].bindings;
-            // adamBinder_ = dSetMgr.CreateDescriptorSetBinder(dSetMgr.CreateDescriptorSet(binds), binds);
-            
-            // PLUGIN_LOG_I("RenderNodeSRDownsampleInit: Adam optimizer shader loaded");
-        // }
-    // }
 }
 
 void RenderNodeSRDownsampleInit::ExecuteFrame(IRenderCommandList& cmdList)
@@ -256,10 +150,7 @@ void RenderNodeSRDownsampleInit::ExecuteFrame(IRenderCommandList& cmdList)
     }
     
     // Check resources
-    if (!RenderHandleUtil::IsValid(depthBuffer_) || !RenderHandleUtil::IsValid(normalBuffer_) ||
-        !RenderHandleUtil::IsValid(materialBuffer_) || !RenderHandleUtil::IsValid(lrTexture_) ||
-        !RenderHandleUtil::IsValid(lrGradient_) || !RenderHandleUtil::IsValid(gtImage_)) {
-        PLUGIN_LOG_W("RenderNodeSRDownsampleInit: Missing resources, skipping frame");
+    if (!RenderHandleUtil::IsValid(lrTexture_) || !RenderHandleUtil::IsValid(lrGradient_)) {
         return;
     }
     
@@ -268,25 +159,12 @@ void RenderNodeSRDownsampleInit::ExecuteFrame(IRenderCommandList& cmdList)
     cmdList.AddCustomBarrierPoint();
     if (!config_.initialized) {
         config_.initialized = true;
-        PLUGIN_LOG_I("RenderNodeSRDownsampleInit: LR texture initialized from GT base_color");
     }
-    
-    // Pass 1: Clear gradient buffer
-    // DispatchClearGradient(cmdList);
-    // cmdList.AddCustomBarrierPoint();
-    
-    // Pass 2: Differentiable render (forward + loss + backward)
-    // DispatchDifferentiableRender(cmdList);
-    // cmdList.AddCustomBarrierPoint();
-    
-    // Pass 3: Adam optimizer update
-    // DispatchAdamOptimizer(cmdList);
 }
 
 void RenderNodeSRDownsampleInit::DispatchDownsampleInit(IRenderCommandList& cmdList)
 {
     if (!RenderHandleUtil::IsValid(psos_.downsample) || !RenderHandleUtil::IsValid(baseColorBuffer_)) {
-        PLUGIN_LOG_W("RenderNodeSRDownsampleInit: Cannot initialize LR texture - missing downsample PSO or base_color");
         return;
     }
     
@@ -337,179 +215,5 @@ void RenderNodeSRDownsampleInit::DispatchDownsampleInit(IRenderCommandList& cmdL
     // Dispatch
     const uint32_t groupX = (config_.lrWidth + psos_.downsampleTGS.x - 1) / psos_.downsampleTGS.x;
     const uint32_t groupY = (config_.lrHeight + psos_.downsampleTGS.y - 1) / psos_.downsampleTGS.y;
-    cmdList.Dispatch(groupX, groupY, 1);
-}
-
-void RenderNodeSRDownsampleInit::DispatchClearGradient(IRenderCommandList& cmdList)
-{
-    // Gradient buffer is cleared by Adam optimizer at the end of each iteration
-    // (see sr_adam_optimizer.comp: imageStore(uGradient, coord, vec4(0.0)))
-    // No separate clear pass needed - Adam clears after using the gradient
-}
-
-void RenderNodeSRDownsampleInit::DispatchDifferentiableRender(IRenderCommandList& cmdList)
-{
-    if (!RenderHandleUtil::IsValid(psos_.differentiableRender)) {
-        return;
-    }
-    
-    cmdList.BindPipeline(psos_.differentiableRender);
-    
-    differentiableRenderBinder_->ClearBindings();
-    differentiableRenderBinder_->BindImage(0, depthBuffer_);
-    differentiableRenderBinder_->BindImage(1, normalBuffer_);
-    differentiableRenderBinder_->BindImage(2, materialBuffer_);
-    differentiableRenderBinder_->BindImage(3, uvBuffer_);
-    differentiableRenderBinder_->BindImage(4, baseColorBuffer_);  // binding 4 for downsample init
-    differentiableRenderBinder_->BindImage(5, lrTexture_);
-    differentiableRenderBinder_->BindSampler(6, sampler_);
-    differentiableRenderBinder_->BindImage(7, lrGradient_);
-    differentiableRenderBinder_->BindImage(8, lossOutput_);
-    differentiableRenderBinder_->BindImage(9, gtImage_);
-    differentiableRenderBinder_->BindImage(10, debugOutput_);
-    
-    cmdList.UpdateDescriptorSet(differentiableRenderBinder_->GetDescriptorSetHandle(),
-                                 differentiableRenderBinder_->GetDescriptorSetLayoutBindingResources());
-    cmdList.BindDescriptorSet(0U, differentiableRenderBinder_->GetDescriptorSetHandle());
-    
-    // Push constants (must match sr_differentiable_render.comp layout)
-    /**
-     * Note: Although Vulkan's maxPushConstantsSize is 256 bytes,
-     * the MAX_PUSH_CONSTANT_BYTE_SIZE is intentionally capped at 128 bytes,
-     * see line 39 of LumeRender/api/render/device/pipeline_layout_desc.h.
-     * Any data exceeding this limit will be TRUNCATED.
-     */
-    struct PushConstantData {
-        uint32_t gtWidth;
-        uint32_t gtHeight;
-        uint32_t lrWidth;
-        uint32_t lrHeight;
-        
-        // Light direction
-        float lightDirX;
-        float lightDirY;
-        float lightDirZ;
-        
-        uint32_t useUVBuffer;
-        
-        // Light color
-        float lightColorR;
-        float lightColorG;
-        float lightColorB;
-        float lossScale;
-        
-        // Camera position
-        float cameraPosX;
-        float cameraPosY;
-        float cameraPosZ;
-        float _pad;
-        
-        // View-Projection Inverse matrix (row 0)
-        float vpInv00;
-        float vpInv01;
-        float vpInv02;
-        float vpInv03;
-        
-        // View-Projection Inverse matrix (row 1)
-        float vpInv10;
-        float vpInv11;
-        float vpInv12;
-        float vpInv13;
-        
-        // View-Projection Inverse matrix (row 2)
-        float vpInv20;
-        float vpInv21;
-        float vpInv22;
-        float vpInv23;
-        
-        // View-Projection Inverse matrix (row 3)
-        float vpInv30;
-        float vpInv31;
-        float vpInv32;
-        float vpInv33;
-    } pc;
-    
-    pc.gtWidth = config_.gtWidth;
-    pc.gtHeight = config_.gtHeight;
-    pc.lrWidth = config_.lrWidth;
-    pc.lrHeight = config_.lrHeight;
-    pc.useUVBuffer = RenderHandleUtil::IsValid(uvBuffer_) ? 1u : 0u;
-    
-    pc.lightDirX = config_.lightDir.x;
-    pc.lightDirY = config_.lightDir.y;
-    pc.lightDirZ = config_.lightDir.z;
-    
-    pc.lightColorR = config_.lightColor.x;
-    pc.lightColorG = config_.lightColor.y;
-    pc.lightColorB = config_.lightColor.z;
-    pc.lossScale = config_.lossScale;
-    
-    pc.cameraPosX = config_.cameraPos.x;
-    pc.cameraPosY = config_.cameraPos.y;
-    pc.cameraPosZ = config_.cameraPos.z;
-    pc._pad = 0.0f;
-    
-    // View-Projection Inverse matrix
-    pc.vpInv00 = config_.viewProjInv.data[0];
-    pc.vpInv01 = config_.viewProjInv.data[1];
-    pc.vpInv02 = config_.viewProjInv.data[2];
-    pc.vpInv03 = config_.viewProjInv.data[3];
-    pc.vpInv10 = config_.viewProjInv.data[4];
-    pc.vpInv11 = config_.viewProjInv.data[5];
-    pc.vpInv12 = config_.viewProjInv.data[6];
-    pc.vpInv13 = config_.viewProjInv.data[7];
-    pc.vpInv20 = config_.viewProjInv.data[8];
-    pc.vpInv21 = config_.viewProjInv.data[9];
-    pc.vpInv22 = config_.viewProjInv.data[10];
-    pc.vpInv23 = config_.viewProjInv.data[11];
-    pc.vpInv30 = config_.viewProjInv.data[12];
-    pc.vpInv31 = config_.viewProjInv.data[13];
-    pc.vpInv32 = config_.viewProjInv.data[14];
-    pc.vpInv33 = config_.viewProjInv.data[15];
-    
-    constexpr PushConstant pushConstant { ShaderStageFlagBits::CORE_SHADER_STAGE_COMPUTE_BIT, sizeof(PushConstantData) };
-    cmdList.PushConstantData(pushConstant, arrayviewU8(pc));
-    
-    const uint32_t groupX = (config_.gtWidth + psos_.differentiableRenderTGS.x - 1) / psos_.differentiableRenderTGS.x;
-    const uint32_t groupY = (config_.gtHeight + psos_.differentiableRenderTGS.y - 1) / psos_.differentiableRenderTGS.y;
-    cmdList.Dispatch(groupX, groupY, 1);
-}
-
-void RenderNodeSRDownsampleInit::DispatchAdamOptimizer(IRenderCommandList& cmdList)
-{
-    if (!RenderHandleUtil::IsValid(psos_.adamOptimizer)) {
-        return;
-    }
-    
-    cmdList.BindPipeline(psos_.adamOptimizer);
-    
-    adamBinder_->ClearBindings();
-    adamBinder_->BindImage(0, lrTexture_);
-    adamBinder_->BindImage(1, lrGradient_);
-    adamBinder_->BindImage(2, lrMomentum1_);
-    adamBinder_->BindImage(3, lrMomentum2_);
-    
-    cmdList.UpdateDescriptorSet(adamBinder_->GetDescriptorSetHandle(),
-                                 adamBinder_->GetDescriptorSetLayoutBindingResources());
-    cmdList.BindDescriptorSet(0U, adamBinder_->GetDescriptorSetHandle());
-    
-    struct PushConstantData {
-        float learningRate;
-        float beta1;
-        float beta2;
-        float epsilon;
-        int iteration;
-    } pc;
-    pc.learningRate = config_.learningRate;
-    pc.beta1 = config_.beta1;
-    pc.beta2 = config_.beta2;
-    pc.epsilon = config_.epsilon;
-    pc.iteration = static_cast<int>(config_.iteration);
-    
-    constexpr PushConstant pushConstant { ShaderStageFlagBits::CORE_SHADER_STAGE_COMPUTE_BIT, sizeof(PushConstantData) };
-    cmdList.PushConstantData(pushConstant, arrayviewU8(pc));
-    
-    const uint32_t groupX = (config_.lrWidth + psos_.adamTGS.x - 1) / psos_.adamTGS.x;
-    const uint32_t groupY = (config_.lrHeight + psos_.adamTGS.y - 1) / psos_.adamTGS.y;
     cmdList.Dispatch(groupX, groupY, 1);
 }
