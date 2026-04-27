@@ -5,7 +5,8 @@
 layout(set = 0, binding = 0) uniform texture2D uSourceTex;
 layout(set = 0, binding = 1) uniform sampler uSampler;
 layout(set = 0, binding = 2, rgba8) uniform image2D uDestImage;
-layout(set = 0, binding = 3, rgba32f) uniform image2D uLRGradient;
+layout(set = 0, binding = 3, rgba8) uniform image2D uLRNormal;
+layout(set = 0, binding = 4) uniform texture2D uNormal;
 
 layout(push_constant, std430) uniform uPushConstant {
     vec2 sourceSize;
@@ -27,8 +28,11 @@ void main() {
     // 使用双线性采样下采样
     vec4 color = textureLod(sampler2D(uSourceTex, uSampler), uv, 0.0);
 
+    vec4 normal = textureLod(sampler2D(uNormal, uSampler), uv, 0.0);
+
     color = vec4(0.2, 0.2, 0.2, 1.);
 
     // 写入目标纹理
     imageStore(uDestImage, destCoord, color);
+    imageStore(uLRNormal, destCoord, normal);
 }

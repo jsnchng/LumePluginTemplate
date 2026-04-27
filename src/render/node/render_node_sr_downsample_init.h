@@ -93,12 +93,11 @@ private:
     
     // LR texture (base color to optimize)
     RenderHandle lrTexture_;
+
+    RenderHandle lrNormal_;
     
     // Sampler
     RenderHandle sampler_;
-    
-    // Gradient
-    RenderHandle lrGradient_;
 
     // Pipeline handles
     struct PSOs {

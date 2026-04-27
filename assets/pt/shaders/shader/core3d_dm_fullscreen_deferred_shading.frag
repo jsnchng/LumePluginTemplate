@@ -33,6 +33,7 @@ layout(input_attachment_index = 0, set = 1, binding = 4) uniform subpassInput uG
 // resources: set=1 and binding=0/1 are both defined in .shaderpl, added via resources in .rng/.json
 layout(set = 2, binding = 0) uniform texture2D uLRTexture;
 layout(set = 2, binding = 1) uniform sampler uLRSamplerRepeat;
+layout(set = 2, binding = 2) uniform texture2D uLRNormal;
 
 // unpack gbuffer
 
@@ -318,6 +319,7 @@ vec4 PbrBasicWithLRBaseColor(float depthBufferSample, FullGBufferData fd)
     // Sample base color from low resolution texture using uv stored in G-Buffer, replacing base color from G-Buffer
     vec4 GBufferUv = subpassLoad(uGBufferUv);
     CORE_RELAXEDP vec4 LRBaseColor = textureLod(sampler2D(uLRTexture, uLRSamplerRepeat), GBufferUv.xy, 0);
+    CORE_RELAXEDP vec4 LRNormal = textureLod(sampler2D(uLRNormal, uLRSamplerRepeat), GBufferUv.xy, 0);
     vec4 baseColor = vec4(LRBaseColor.rgb, fd.baseColor.a);  // channel a is from AO not albedo
     // should always be metallic roughness
     InputBrdfData brdfData = CalcBRDFMetallicRoughness(baseColor, fd.material);

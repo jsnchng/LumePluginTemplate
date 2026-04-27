@@ -92,7 +92,7 @@ void RenderNodeSRDownsampleInit::ParseJsonInputs()
         
         if (img.name == "lrGradient" || img.name == "uLRGradient") {
             if (i < imageResources_.images.size()) {
-                lrGradient_ = imageResources_.images[i].handle;
+                lrNormal_ = imageResources_.images[i].handle;
             }
         }
     }
@@ -101,7 +101,7 @@ void RenderNodeSRDownsampleInit::ParseJsonInputs()
     IRenderNodeGraphShareManager& rngShareMgr = renderNodeContextMgr_->GetRenderNodeGraphShareManager();
     baseColorBuffer_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateDefaultCameraGpuImages", "base_color");
     lrTexture_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_texture");
-    lrGradient_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_gradient");
+    lrNormal_ = rngShareMgr.GetRegisteredRenderNodeOutput("LOW_RESOLUTION_TEXTURES", "lr_normal");
     const auto& gpuResourceMgr = renderNodeContextMgr_->GetGpuResourceManager();
     sampler_ = gpuResourceMgr.GetSamplerHandle("CORE_DEFAULT_SAMPLER_LINEAR_MIPMAP_REPEAT"); // default sampler
 }
@@ -150,7 +150,7 @@ void RenderNodeSRDownsampleInit::ExecuteFrame(IRenderCommandList& cmdList)
     }
     
     // Check resources
-    if (!RenderHandleUtil::IsValid(lrTexture_) || !RenderHandleUtil::IsValid(lrGradient_)) {
+    if (!RenderHandleUtil::IsValid(lrTexture_) || !RenderHandleUtil::IsValid(lrNormal_)) {
         return;
     }
     
@@ -177,6 +177,7 @@ void RenderNodeSRDownsampleInit::DispatchDownsampleInit(IRenderCommandList& cmdL
     const auto& materialHandles = dataStoreMaterial->GetMaterialHandles();
     const auto& handles = materialHandles[1];
     const RenderHandle baseColorImage = handles.images[0];
+    const RenderHandle normalImage = handles.images[1];
     const RenderHandle baseColorSampler = handles.samplers[0];
     // Bind: source=baseColorBuffer (G-Buffer), dest=lrTexture
     downsampleBinder_->ClearBindings();
@@ -185,13 +186,17 @@ void RenderNodeSRDownsampleInit::DispatchDownsampleInit(IRenderCommandList& cmdL
     } else {
         downsampleBinder_->BindImage(0, baseColorImage);
     }
+    if (!RenderHandleUtil::IsValid(normalImage)) {
+    } else {
+        downsampleBinder_->BindImage(4, normalImage);
+    }
     if (!RenderHandleUtil::IsValid(baseColorSampler)) {
         downsampleBinder_->BindSampler(1, sampler_);
     } else {
         downsampleBinder_->BindSampler(1, baseColorSampler);
     }
     downsampleBinder_->BindImage(2, lrTexture_);
-    downsampleBinder_->BindImage(3, lrGradient_);
+    downsampleBinder_->BindImage(3, lrNormal_);
     
     cmdList.UpdateDescriptorSet(downsampleBinder_->GetDescriptorSetHandle(),
                                  downsampleBinder_->GetDescriptorSetLayoutBindingResources());
