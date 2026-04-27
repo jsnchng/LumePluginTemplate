@@ -25,6 +25,7 @@ CORE_NS::PluginToken CreatePluginPT(RENDER_NS::IRenderContext& context)
     {
         RENDER_NS::IShaderManager::ShaderFilePathDesc desc;
         desc.shaderPath = "pt://shaders/";
+        desc.pipelineLayoutPath = "pt://pipelinelayouts/";
         context.GetDevice().GetShaderManager().LoadShaderFiles(desc);
     }
     return &context;
