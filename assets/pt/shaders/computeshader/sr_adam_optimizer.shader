@@ -5,5 +5,5 @@
     },
     "category" : "Render/ComputeEffect",
     "displayName" : "SR Adam Optimizer",
-    "compute": "ptshaders://computeshader/sr_adam_optimizer.comp.spv"
+    "compute": "pt://shaders/computeshader/sr_adam_optimizer.comp.spv"
 }

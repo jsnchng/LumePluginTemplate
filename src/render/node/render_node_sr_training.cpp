@@ -174,7 +174,7 @@ void RenderNodeSRTraining::CreatePsos()
     DescriptorCounts totalCounts;
     const auto& renderNodeUtil = renderNodeContextMgr_->GetRenderNodeUtil();
     // {
-        // RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/texture_downsample.shader");
+        // RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/texture_downsample.shader");
         // if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
             // const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
             // const auto& counts = renderNodeUtil.GetDescriptorCounts(pl);
@@ -184,7 +184,7 @@ void RenderNodeSRTraining::CreatePsos()
         // }
     // }
     {
-        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/sr_differentiable_render.shader");
+        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/sr_differentiable_render.shader");
         if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
             const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
             const auto& counts = renderNodeUtil.GetDescriptorCounts(pl);
@@ -194,7 +194,7 @@ void RenderNodeSRTraining::CreatePsos()
         }
     }
     {
-        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/sr_adam_optimizer.shader");
+        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/sr_adam_optimizer.shader");
         if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
             const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
             const auto& counts = renderNodeUtil.GetDescriptorCounts(pl);
@@ -207,7 +207,7 @@ void RenderNodeSRTraining::CreatePsos()
 
     // Load downsample shader (for LR texture initialization)
     // {
-        // RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/texture_downsample.shader");
+        // RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/texture_downsample.shader");
         // if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
             // const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
             // psos_.downsample = psoMgr.GetComputePsoHandle(shaderHandle, pl, {});
@@ -222,7 +222,7 @@ void RenderNodeSRTraining::CreatePsos()
     
     // Load differentiable render shader
     {
-        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/sr_differentiable_render.shader");
+        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/sr_differentiable_render.shader");
         if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
             const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
             psos_.differentiableRender = psoMgr.GetComputePsoHandle(shaderHandle, pl, {});
@@ -237,7 +237,7 @@ void RenderNodeSRTraining::CreatePsos()
     
     // Load adam optimizer shader
     {
-        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("ptshaders://computeshader/sr_adam_optimizer.shader");
+        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/sr_adam_optimizer.shader");
         if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
             const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
             psos_.adamOptimizer = psoMgr.GetComputePsoHandle(shaderHandle, pl, {});

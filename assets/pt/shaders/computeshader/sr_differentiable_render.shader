@@ -5,5 +5,5 @@
     },
     "category" : "Render/ComputeEffect",
     "displayName" : "SR Differentiable Render",
-    "compute": "ptshaders://computeshader/sr_differentiable_render.comp.spv"
+    "compute": "pt://shaders/computeshader/sr_differentiable_render.comp.spv"
 }

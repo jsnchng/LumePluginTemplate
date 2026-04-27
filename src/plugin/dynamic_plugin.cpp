@@ -18,16 +18,15 @@
 PT_BEGIN_NAMESPACE()
 const char* GetVersionInfo() { return "GIT_REVISION: cf4cfcb"; }
 
-static constexpr RENDER_NS::IShaderManager::ShaderFilePathDesc SHADER_FILE_PATHS {
-    "ptshaders://",
-};
-
 CORE_NS::PluginToken CreatePluginPT(RENDER_NS::IRenderContext& context)
 {
     CORE_NS::IFileManager& fileManager = context.GetEngine().GetFileManager();
     fileManager.RegisterPath("pt", "assets://pt/", false);
-    fileManager.RegisterPath("ptshaders", "pt://shaders/", false);
-    context.GetDevice().GetShaderManager().LoadShaderFiles(SHADER_FILE_PATHS);
+    {
+        RENDER_NS::IShaderManager::ShaderFilePathDesc desc;
+        desc.shaderPath = "pt://shaders/";
+        context.GetDevice().GetShaderManager().LoadShaderFiles(desc);
+    }
     return &context;
 }
 
@@ -36,7 +35,6 @@ void DestroyPluginPT(CORE_NS::PluginToken token)
     RENDER_NS::IRenderContext* context = static_cast<RENDER_NS::IRenderContext*>(token);
     CORE_NS::IFileManager& fileManager = context->GetEngine().GetFileManager();
     fileManager.UnregisterPath("pt", "assets://pt/");
-    fileManager.UnregisterPath("ptshaders", "pt://shaders/");
 }
 
 static constexpr RENDER_NS::IRenderPlugin RENDER_PLUGIN(CreatePluginPT, DestroyPluginPT);
