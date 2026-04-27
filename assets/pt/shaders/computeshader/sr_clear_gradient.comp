@@ -1,0 +1,18 @@
+#version 460 core
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shading_language_420pack : enable
+
+layout(set = 0, binding = 0, rgba32f) uniform image2D uLRGradient;
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+void main() {
+    ivec2 destCoord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imgSize = imageSize(uLRGradient);
+
+    if (destCoord.x >= imgSize.x || destCoord.y >= imgSize.y) {
+        return;
+    }
+
+    imageStore(uLRGradient, destCoord, vec4(0.0));
+}

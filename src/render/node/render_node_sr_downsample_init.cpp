@@ -155,9 +155,9 @@ void RenderNodeSRDownsampleInit::ExecuteFrame(IRenderCommandList& cmdList)
     }
     
     // Pass 0: Initialize LR texture (only once, on first frame)
-    DispatchDownsampleInit(cmdList);
-    cmdList.AddCustomBarrierPoint();
     if (!config_.initialized) {
+        DispatchDownsampleInit(cmdList);
+        cmdList.AddCustomBarrierPoint();
         config_.initialized = true;
     }
 }
@@ -199,12 +199,12 @@ void RenderNodeSRDownsampleInit::DispatchDownsampleInit(IRenderCommandList& cmdL
     
     // Push constants
     struct PushConstantData {
-        float initialized;
+        float sourceWidth;
         float sourceHeight;
         float destWidth;
         float destHeight;
     } pc;
-    pc.initialized = static_cast<float>(config_.initialized);
+    pc.sourceWidth = static_cast<float>(config_.gtWidth);
     pc.sourceHeight = static_cast<float>(config_.gtHeight);
     pc.destWidth = static_cast<float>(config_.lrWidth);
     pc.destHeight = static_cast<float>(config_.lrHeight);

@@ -21,20 +21,14 @@ void main() {
         return;
     }
 
-    // 只在首次初始化纹理
-    if (sourceSize.x < 1.) {
-        // 计算在源纹理中的对应位置
-        vec2 uv = (vec2(destCoord) + 0.5) / 512; // 有问题，运行的时候destSize=2048，但debug的时候是512
+    // 计算在源纹理中的对应位置
+    vec2 uv = (vec2(destCoord) + 0.5) / 512; // 有问题，运行的时候destSize=2048，但debug的时候是512
 
-        // 使用双线性采样下采样
-        vec4 color = textureLod(sampler2D(uSourceTex, uSampler), uv, 0.0);
+    // 使用双线性采样下采样
+    vec4 color = textureLod(sampler2D(uSourceTex, uSampler), uv, 0.0);
 
-        color = vec4(0.2, 0.2, 0.2, 1.);
+    color = vec4(0.2, 0.2, 0.2, 1.);
 
-        // 写入目标纹理
-        imageStore(uDestImage, destCoord, color);
-    }
-
-    // 每次在使用uLRGradient前清空
-    imageStore(uLRGradient, destCoord, vec4(0.0));
+    // 写入目标纹理
+    imageStore(uDestImage, destCoord, color);
 }

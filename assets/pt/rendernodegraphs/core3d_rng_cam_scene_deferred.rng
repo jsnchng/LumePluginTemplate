@@ -173,6 +173,14 @@
             }
         },
         {
+            "typeName": "RenderNodeSRClearGradient",
+            "nodeName": "SR_CLEAR_GRADIENT",
+            "queue": {
+                "type": "graphics",
+                "index": 0
+            }
+        },
+        {
             "typeName": "RenderNodeDefaultCameraController",
             "nodeName": "RenderNodeDefaultCameraController"
         },

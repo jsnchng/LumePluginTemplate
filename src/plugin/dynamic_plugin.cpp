@@ -14,6 +14,7 @@
 
 #include "render/node/render_node_sr_training.h"
 #include "render/node/render_node_sr_downsample_init.h"
+#include "render/node/render_node_sr_clear_gradient.h"
 
 PT_BEGIN_NAMESPACE()
 const char* GetVersionInfo() { return "GIT_REVISION: cf4cfcb"; }
@@ -54,9 +55,10 @@ constexpr auto FillRenderNodeTypeInfo()
         {}, {} };
 }
 
-constexpr RENDER_NS::RenderNodeTypeInfo PT_RENDER_NODE_TYPE_INFOS[2] = {
+constexpr RENDER_NS::RenderNodeTypeInfo PT_RENDER_NODE_TYPE_INFOS[3] = {
     FillRenderNodeTypeInfo<RENDER_NS::RenderNodeSRTraining>(),
     FillRenderNodeTypeInfo<RENDER_NS::RenderNodeSRDownsampleInit>(),
+    FillRenderNodeTypeInfo<RENDER_NS::RenderNodeSRClearGradient>(),
 };
 
 CORE_NS::PluginToken RegisterInterfaces(CORE_NS::IPluginRegister& pluginRegistry)
