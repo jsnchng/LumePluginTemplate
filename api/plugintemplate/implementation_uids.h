@@ -6,6 +6,7 @@
 
 PT_BEGIN_NAMESPACE()
 static constexpr BASE_NS::Uid UID_PT_PLUGIN { "3f4a9c2b-e71d-4a8f-9b3e-2d1c0a5f6e7b" };
+static constexpr BASE_NS::Uid UID_CAMERA_CONTROL_SYSTEM { "bba62a82-cc47-4a9a-9642-4944a583d35f" };
 PT_END_NAMESPACE()
 
 #endif // API_PT_IMPLEMENTATION_UIDS_H

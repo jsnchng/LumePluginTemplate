@@ -75,6 +75,7 @@ target_link_libraries(LumePTAPI INTERFACE
 #
 add_library(PluginLumePT SHARED
   ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/dynamic_plugin.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/ecs/system/camera_control_system.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/render/node/render_node_sr_downsample_init.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/render/node/render_node_sr_training.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/render/node/render_node_sr_clear_gradient.cpp)

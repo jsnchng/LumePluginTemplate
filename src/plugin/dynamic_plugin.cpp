@@ -12,6 +12,7 @@
 
 #include <iostream>
 
+#include <plugintemplate/camera_control_system.h>
 #include "render/node/render_node_sr_training.h"
 #include "render/node/render_node_sr_downsample_init.h"
 #include "render/node/render_node_sr_clear_gradient.h"
@@ -61,6 +62,15 @@ constexpr RENDER_NS::RenderNodeTypeInfo PT_RENDER_NODE_TYPE_INFOS[3] = {
     FillRenderNodeTypeInfo<RENDER_NS::RenderNodeSRClearGradient>(),
 };
 
+// System type info for CameraControlSystem
+constexpr CORE_NS::SystemTypeInfo CAMERA_CONTROL_SYSTEM_TYPE_INFO {
+    { CORE_NS::SystemTypeInfo::UID },
+    CameraControlSystem::UID,
+    CameraControlSystem::TYPE_NAME,
+    CameraControlSystem::Create,
+    CameraControlSystem::Destroy,
+};
+
 CORE_NS::PluginToken RegisterInterfaces(CORE_NS::IPluginRegister& pluginRegistry)
 {
     pluginRegistry.RegisterTypeInfo(RENDER_PLUGIN);
@@ -68,6 +78,8 @@ CORE_NS::PluginToken RegisterInterfaces(CORE_NS::IPluginRegister& pluginRegistry
     for (const auto& info : PT_RENDER_NODE_TYPE_INFOS) {
         pluginRegistry.RegisterTypeInfo(info);
     }
+    // Register CameraControlSystem
+    pluginRegistry.RegisterTypeInfo(CAMERA_CONTROL_SYSTEM_TYPE_INFO);
     return &pluginRegistry;
 }
 
@@ -77,6 +89,8 @@ void UnregisterInterfaces(CORE_NS::PluginToken token)
         return;
     }
     auto* pluginRegistry = static_cast<CORE_NS::IPluginRegister*>(token);
+    // Unregister CameraControlSystem
+    pluginRegistry->UnregisterTypeInfo(CAMERA_CONTROL_SYSTEM_TYPE_INFO);
     // Unregister custom render nodes
     for (const auto& info : PT_RENDER_NODE_TYPE_INFOS) {
         pluginRegistry->UnregisterTypeInfo(info);
