@@ -1,18 +1,3 @@
-/*
- * Copyright (c) 2024 Huawei Device Co., Ltd.
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 #ifndef RENDER_POSTPROCESS_RENDER_NODE_SR_TRAINING_TEST_H
 #define RENDER_POSTPROCESS_RENDER_NODE_SR_TRAINING_TEST_H
 
@@ -28,15 +13,9 @@ RENDER_BEGIN_NAMESPACE()
 class IRenderCommandList;
 class IRenderNodeContextManager;
 
-// ============================================================================
-// Downsample Init Node
-// ============================================================================
-// Passes:
-//   Pass 0: Downsample GT → LR (only on first frame, initializes LR texture)
-// ============================================================================
 class RenderNodeSRDownsampleInit final : public IRenderNode {
 public:
-    static constexpr BASE_NS::Uid UID { "a1b2c3d4-e5f6-7890-abcd-ef1234567891" };
+    static constexpr BASE_NS::Uid UID { "2ca1a08d-13d9-45f2-81fc-e093db492f3f" };
     static constexpr const char* TYPE_NAME = "RenderNodeSRDownsampleInit";
     static constexpr IRenderNode::BackendFlags BACKEND_FLAGS = IRenderNode::BackendFlagBits::BACKEND_FLAG_BITS_DEFAULT;
     static constexpr IRenderNode::ClassType CLASS_TYPE = IRenderNode::ClassType::CLASS_TYPE_NODE;
@@ -54,11 +33,8 @@ public:
 
     // Configuration
     struct Config {
-        uint32_t gtWidth = 1024;
-        uint32_t gtHeight = 1024;
         uint32_t lrWidth = 512;
         uint32_t lrHeight = 512;
-        bool enabled = true;
         bool initialized = false;  // Track if LR texture has been initialized
     };
 
@@ -66,51 +42,32 @@ public:
     const Config& GetConfig() const { return config_; }
 
 private:
-    void CreatePsos();
-    void ParseJsonInputs();
-    
-    // Initialization pass (runs once)
     void DispatchDownsampleInit(IRenderCommandList& cmdList);
-    
-    // Per-frame passes
 
     IRenderNodeContextManager* renderNodeContextMgr_ { nullptr };
 
     Config config_;
 
-    // JSON parsed resources
-    struct JsonInputs {
-        RenderNodeGraphInputs::InputResources resources;
-        RenderNodeGraphInputs::InputResources images;
-    };
-    JsonInputs jsonInputs_;
+    // high-res raw textures for downsampling
+    RenderHandle rawAlbedo_;
+    RenderHandle rawNormal_;
+    RenderHandle rawMaterial_;
+    RenderHandle rawEmissive_;
+    RenderHandle rawAo_;
 
-    RenderNodeHandles::InputResources inputResources_;
-    RenderNodeHandles::InputResources imageResources_;
-
-    // G-Buffer handles
-    RenderHandle baseColorBuffer_;  // G-Buffer base color (for downsample init)
-    
-    // LR texture (base color to optimize)
-    RenderHandle lrTexture_;
-
+    // low-res textures for optimization
+    RenderHandle lrAlbedo_;
     RenderHandle lrNormal_;
-    
-    // Sampler
-    RenderHandle sampler_;
+    RenderHandle lrMaterial_;
+    RenderHandle lrEmissive_;
+    RenderHandle lrAo_;
 
-    // Pipeline handles
-    struct PSOs {
-        RenderHandle downsample;         // For LR texture initialization
+    RenderHandle defaultSampler_;
 
-        ShaderThreadGroup downsampleTGS { 8, 8, 1 };
-    };
-    PSOs psos_;
+    RenderHandle psoHandle_;
+    ShaderThreadGroup threadGroupSize_{ 1u, 1u, 1u };
 
-    // Descriptor set binders
-    IDescriptorSetBinder::Ptr downsampleBinder_;
-
-    bool valid_ { false };
+    IDescriptorSetBinder::Ptr binder_;
 };
 
 RENDER_END_NAMESPACE()

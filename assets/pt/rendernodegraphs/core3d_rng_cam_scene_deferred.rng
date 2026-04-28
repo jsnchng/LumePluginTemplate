@@ -80,16 +80,6 @@
             "nodeName": "RenderNodeCreateGpuImages",
             "gpuImageDescs": [
                 {
-                    "name": "lr_texture",
-                    "shareName": "lr_texture",
-                    "format": "r8g8b8a8_unorm",
-                    "width": 512,
-                    "height": 512,
-                    "usageFlags": "sampled | storage",
-                    "memoryPropertyFlags": "device_local",
-                    "engineCreationFlags": "dynamic_barriers"
-                },
-                {
                     "name": "lr_gradient",
                     "shareName": "lr_gradient",
                     "format": "r32g32b32a32_sfloat",
@@ -169,8 +159,48 @@
             "nodeName": "LOW_RESOLUTION_TEXTURES",
             "gpuImageDescs": [
                 {
-                    "name": "lr_normal",
-                    "shareName": "lr_normal",
+                    "name": "lowres_albedo",
+                    "shareName": "lowres_albedo",
+                    "format": "r8g8b8a8_unorm",
+                    "width": 512,
+                    "height": 512,
+                    "usageFlags": "sampled | storage",
+                    "memoryPropertyFlags": "device_local",
+                    "engineCreationFlags": "dynamic_barriers"
+                },
+                {
+                    "name": "lowres_normal",
+                    "shareName": "lowres_normal",
+                    "format": "r8g8b8a8_unorm",
+                    "width": 512,
+                    "height": 512,
+                    "usageFlags": "sampled | storage",
+                    "memoryPropertyFlags": "device_local",
+                    "engineCreationFlags": "dynamic_barriers"
+                },
+                {
+                    "name": "lowres_material",
+                    "shareName": "lowres_material",
+                    "format": "r8g8b8a8_unorm",
+                    "width": 512,
+                    "height": 512,
+                    "usageFlags": "sampled | storage",
+                    "memoryPropertyFlags": "device_local",
+                    "engineCreationFlags": "dynamic_barriers"
+                },
+                {
+                    "name": "lowres_emissive",
+                    "shareName": "lowres_emissive",
+                    "format": "r8g8b8a8_unorm",
+                    "width": 512,
+                    "height": 512,
+                    "usageFlags": "sampled | storage",
+                    "memoryPropertyFlags": "device_local",
+                    "engineCreationFlags": "dynamic_barriers"
+                },
+                {
+                    "name": "lowres_ao",
+                    "shareName": "lowres_ao",
                     "format": "r8g8b8a8_unorm",
                     "width": 512,
                     "height": 512,
@@ -186,6 +216,18 @@
             "queue": {
                 "type": "graphics",
                 "index": 0
+            },
+            "shader": "pt://shaders/computeshader/sr_downsample_init.shader",
+            "custom": {
+                "renderDataStoreName": "RenderDataStoreDefaultMaterial",
+                "targetMaterialIndex": 1,
+                "albedoShareName": "lowres_albedo",
+                "normalShareName": "lowres_normal",
+                "materialShareName": "lowres_material",
+                "emissiveShareName": "lowres_emissive",
+                "aoShareName": "lowres_ao",
+                "defaultSamplerName": "CORE_DEFAULT_SAMPLER_LINEAR_CLAMP",
+                "shareNameFromNode": "LOW_RESOLUTION_TEXTURES"
             }
         },
         {
@@ -396,12 +438,12 @@
                     {
                         "set": 2,
                         "binding": 0,
-                        "name": "lr_texture"
+                        "name": "lowres_albedo"
                     },
                     {
                         "set": 2,
                         "binding": 2,
-                        "name": "lr_normal"
+                        "name": "lowres_normal"
                     }
                 ],
                 "samplers": [
@@ -455,7 +497,7 @@
                     "type": "texture",
                     "name": "lrTexture",
                     "binding": 5,
-                    "usageName": "lr_texture"
+                    "usageName": "lowres_albedo"
                 },
                 {
                     "type": "sampler",
@@ -532,7 +574,7 @@
                     {
                         "set": 0,
                         "binding": 3,
-                        "name": "lr_texture"
+                        "name": "lowres_albedo"
                     },
                     {
                         "set": 0,

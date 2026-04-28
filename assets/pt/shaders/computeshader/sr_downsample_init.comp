@@ -2,15 +2,20 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 
-layout(set = 0, binding = 0) uniform texture2D uSourceTex;
-layout(set = 0, binding = 1) uniform sampler uSampler;
-layout(set = 0, binding = 2, rgba8) uniform image2D uDestImage;
-layout(set = 0, binding = 3, rgba8) uniform image2D uLRNormal;
-layout(set = 0, binding = 4) uniform texture2D uNormal;
+layout(set = 0, binding = 0) uniform sampler defaultSampler;
+layout(set = 0, binding = 1) uniform texture2D rawAlbedo;
+layout(set = 0, binding = 2, rgba8) uniform image2D lrAlbedo;
+layout(set = 0, binding = 3) uniform texture2D rawNormal;
+layout(set = 0, binding = 4, rgba8) uniform image2D lrNormal;
+layout(set = 0, binding = 5) uniform texture2D rawMaterial;
+layout(set = 0, binding = 6, rgba8) uniform image2D lrMaterial;
+layout(set = 0, binding = 7) uniform texture2D rawEmissive;
+layout(set = 0, binding = 8, rgba8) uniform image2D lrEmissive;
+layout(set = 0, binding = 9) uniform texture2D rawAO;
+layout(set = 0, binding = 10, rgba8) uniform image2D lrAO;
 
 layout(push_constant, std430) uniform uPushConstant {
-    vec2 sourceSize;
-    vec2 destSize;
+    ivec2 destSize;
 };
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
@@ -18,21 +23,22 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 void main() {
     ivec2 destCoord = ivec2(gl_GlobalInvocationID.xy);
     
-    if (destCoord.x >= int(destSize.x) || destCoord.y >= int(destSize.y)) {
+    if (destCoord.x >= destSize.x || destCoord.y >= destSize.y) {
         return;
     }
 
-    // 计算在源纹理中的对应位置
-    vec2 uv = (vec2(destCoord) + 0.5) / 512; // 有问题，运行的时候destSize=2048，但debug的时候是512
+    vec2 uv = (vec2(destCoord) + 0.5) / vec2(destSize);
 
-    // 使用双线性采样下采样
-    vec4 color = textureLod(sampler2D(uSourceTex, uSampler), uv, 0.0);
+    vec4 albedo = textureLod(sampler2D(rawAlbedo, defaultSampler), uv, 0.0);
+    albedo = vec4(0.2, 0.2, 0.2, 1.0); // for debug
+    vec4 normal = textureLod(sampler2D(rawNormal, defaultSampler), uv, 0.0);
+    vec4 material = textureLod(sampler2D(rawMaterial, defaultSampler), uv, 0.0);
+    vec4 emissive = textureLod(sampler2D(rawEmissive, defaultSampler), uv, 0.0);
+    vec4 ao = textureLod(sampler2D(rawAO, defaultSampler), uv, 0.0);
 
-    vec4 normal = textureLod(sampler2D(uNormal, uSampler), uv, 0.0);
-
-    color = vec4(0.2, 0.2, 0.2, 1.);
-
-    // 写入目标纹理
-    imageStore(uDestImage, destCoord, color);
-    imageStore(uLRNormal, destCoord, normal);
+    imageStore(lrAlbedo, destCoord, albedo);
+    imageStore(lrNormal, destCoord, normal);
+    imageStore(lrMaterial, destCoord, material);
+    imageStore(lrEmissive, destCoord, emissive);
+    imageStore(lrAO, destCoord, ao);
 }

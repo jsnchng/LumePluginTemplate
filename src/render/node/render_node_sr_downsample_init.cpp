@@ -1,18 +1,3 @@
-/*
- * Copyright (c) 2024 Huawei Device Co., Ltd.
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 #include "render_node_sr_downsample_init.h"
 
 #include <3d/render/intf_render_data_store_default_material.h>
@@ -32,129 +17,73 @@
 using namespace BASE_NS;
 using namespace RENDER_NS;
 
-IRenderNode* RenderNodeSRDownsampleInit::Create()
-{
-    return new RenderNodeSRDownsampleInit;
-}
-
-void RenderNodeSRDownsampleInit::Destroy(IRenderNode* instance)
-{
-    delete static_cast<RenderNodeSRDownsampleInit*>(instance);
-}
-
 void RenderNodeSRDownsampleInit::InitNode(IRenderNodeContextManager& renderNodeContextMgr)
 {
     renderNodeContextMgr_ = &renderNodeContextMgr;
     
-    ParseJsonInputs();
-    CreatePsos();
-    
-    valid_ = true;
-}
-
-void RenderNodeSRDownsampleInit::ParseJsonInputs()
-{
-    const auto& renderNodeUtil = renderNodeContextMgr_->GetRenderNodeUtil();
-    const IRenderNodeParserUtil& parserUtil = renderNodeContextMgr_->GetRenderNodeParserUtil();
-    const auto jsonVal = renderNodeContextMgr_->GetNodeJson();
-    
-    jsonInputs_.resources = parserUtil.GetInputResources(jsonVal, "resources");
-    inputResources_ = renderNodeUtil.CreateInputResources(jsonInputs_.resources);
-    
-    for (size_t i = 0; i < jsonInputs_.resources.images.size(); ++i) {
-        const auto& res = jsonInputs_.resources.images[i];
-        
-        if (res.name == "baseColorBuffer" || res.name == "uBaseColorBuffer") {
-            if (i < inputResources_.images.size()) {
-                baseColorBuffer_ = inputResources_.images[i].handle;
-            }
-        } else if (res.name == "lrTexture" || res.name == "uLRTexture") {
-            if (i < inputResources_.images.size()) {
-                lrTexture_ = inputResources_.images[i].handle;
-            }
-        }
-    }
-    
-    for (size_t i = 0; i < jsonInputs_.resources.samplers.size(); ++i) {
-        const auto& res = jsonInputs_.resources.samplers[i];
-        if (res.name == "sampler" || res.name == "uSampler") {
-            if (i < inputResources_.samplers.size()) {
-                sampler_ = inputResources_.samplers[i].handle;
-            }
-        }
-    }
-    
-    jsonInputs_.images = parserUtil.GetInputResources(jsonVal, "images");
-    imageResources_ = renderNodeUtil.CreateInputResources(jsonInputs_.images);
-    
-    for (size_t i = 0; i < jsonInputs_.images.images.size(); ++i) {
-        const auto& img = jsonInputs_.images.images[i];
-        
-        if (img.name == "lrGradient" || img.name == "uLRGradient") {
-            if (i < imageResources_.images.size()) {
-                lrNormal_ = imageResources_.images[i].handle;
-            }
-        }
-    }
-
-	// Obtain valid handles from GPU images created by previous nodes.
-    IRenderNodeGraphShareManager& rngShareMgr = renderNodeContextMgr_->GetRenderNodeGraphShareManager();
-    baseColorBuffer_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateDefaultCameraGpuImages", "base_color");
-    lrTexture_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_texture");
-    lrNormal_ = rngShareMgr.GetRegisteredRenderNodeOutput("LOW_RESOLUTION_TEXTURES", "lr_normal");
+    const auto& parserUtil = renderNodeContextMgr_->GetRenderNodeParserUtil();
+    const auto nodeJsonVal = renderNodeContextMgr_->GetNodeJson();
+    const auto shaderPath = parserUtil.GetStringValue(nodeJsonVal, "shader");
+    // Get custom settings from json
+    const auto customJsonVal = nodeJsonVal.find("custom");
+    const auto renderDataStoreName = parserUtil.GetStringValue(*customJsonVal, "renderDataStoreName");
+    const auto targetMaterialIndex = parserUtil.GetUintValue(*customJsonVal, "targetMaterialIndex");
+    const auto albedoShareName = parserUtil.GetStringValue(*customJsonVal, "albedoShareName");
+    const auto normalShareName = parserUtil.GetStringValue(*customJsonVal, "normalShareName");
+    const auto materialShareName = parserUtil.GetStringValue(*customJsonVal, "materialShareName");
+    const auto emissiveShareName = parserUtil.GetStringValue(*customJsonVal, "emissiveShareName");
+    const auto aoShareName = parserUtil.GetStringValue(*customJsonVal, "aoShareName");
+    const auto shareNameFromNode = parserUtil.GetStringValue(*customJsonVal, "shareNameFromNode");
+    const auto defaultSamplerName = parserUtil.GetStringValue(*customJsonVal, "defaultSamplerName");
+    // Get high-res raw textures
+    const auto& renderDataStoreMgr = renderNodeContextMgr_->GetRenderDataStoreManager();
+    const auto* dataStoreMaterial = static_cast<CORE3D_NS::IRenderDataStoreDefaultMaterial*>(
+        renderDataStoreMgr.GetRenderDataStore(renderDataStoreName));
+    const auto& materialHandles = dataStoreMaterial->GetMaterialHandles();
+    const auto& currentHandles = materialHandles[targetMaterialIndex];
+    rawAlbedo_ = currentHandles.images[0];
+    rawNormal_ = currentHandles.images[1];
+    rawMaterial_ = currentHandles.images[2];
+    rawEmissive_ = currentHandles.images[3];
+    rawAo_ = currentHandles.images[4];
+    // Get low-res textures
+    const auto& rngShareMgr = renderNodeContextMgr_->GetRenderNodeGraphShareManager();
+    lrAlbedo_ = rngShareMgr.GetRegisteredRenderNodeOutput(shareNameFromNode, albedoShareName);
+    lrNormal_ = rngShareMgr.GetRegisteredRenderNodeOutput(shareNameFromNode, normalShareName);
+    lrMaterial_ = rngShareMgr.GetRegisteredRenderNodeOutput(shareNameFromNode, materialShareName);
+    lrEmissive_ = rngShareMgr.GetRegisteredRenderNodeOutput(shareNameFromNode, emissiveShareName);
+    lrAo_ = rngShareMgr.GetRegisteredRenderNodeOutput(shareNameFromNode, aoShareName);
+    // Get default sampler
     const auto& gpuResourceMgr = renderNodeContextMgr_->GetGpuResourceManager();
-    sampler_ = gpuResourceMgr.GetSamplerHandle("CORE_DEFAULT_SAMPLER_LINEAR_MIPMAP_REPEAT"); // default sampler
-}
+    defaultSampler_ = gpuResourceMgr.GetSamplerHandle(defaultSamplerName);
 
-void RenderNodeSRDownsampleInit::CreatePsos()
-{
-    auto& shaderMgr = renderNodeContextMgr_->GetShaderManager();
-    auto& psoMgr = renderNodeContextMgr_->GetPsoManager();
-    INodeContextDescriptorSetManager& dSetMgr = renderNodeContextMgr_->GetDescriptorSetManager();
-    
     constexpr uint32_t localSetIdx = 0U;
-    
-    // prevent BindDescriptorSet crash by calling ResetAndReserve
-    DescriptorCounts totalCounts;
     const auto& renderNodeUtil = renderNodeContextMgr_->GetRenderNodeUtil();
-    {
-        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/sr_downsample_init.shader");
-        if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
-            const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
-            const auto& counts = renderNodeUtil.GetDescriptorCounts(pl);
-            for (auto count : counts.counts) {
-                totalCounts.counts.push_back(count);
-            }
-        }
+    const auto& shaderMgr = renderNodeContextMgr_->GetShaderManager();
+    auto& psoMgr = renderNodeContextMgr_->GetPsoManager();
+    auto& dSetMgr = renderNodeContextMgr_->GetDescriptorSetManager();
+    // Get shader handle
+    const auto shaderHandle = shaderMgr.GetShaderHandle(shaderPath);
+    if (RenderHandleUtil::GetHandleType(shaderHandle) != RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
+        return;
+    }
+    // Get pipeline layout
+    const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
+    // Get descriptor counts
+    DescriptorCounts totalCounts;
+    for (auto count : renderNodeUtil.GetDescriptorCounts(pl).counts) {
+        totalCounts.counts.push_back(count);
     }
     dSetMgr.ResetAndReserve(totalCounts);
-
-    // Load downsample shader (for LR texture initialization)
-    {
-        RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/sr_downsample_init.shader");
-        if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
-            const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
-            psos_.downsample = psoMgr.GetComputePsoHandle(shaderHandle, pl, {});
-            psos_.downsampleTGS = shaderMgr.GetReflectionThreadGroupSize(shaderHandle);
-            
-            const auto& binds = pl.descriptorSetLayouts[localSetIdx].bindings;
-            downsampleBinder_ = dSetMgr.CreateDescriptorSetBinder(dSetMgr.CreateDescriptorSet(binds), binds);
-        }
-    }
+    psoHandle_ = psoMgr.GetComputePsoHandle(shaderHandle, pl, {});
+    threadGroupSize_ = shaderMgr.GetReflectionThreadGroupSize(shaderHandle);
+    // Create descriptor set
+    const auto& bindings = pl.descriptorSetLayouts[localSetIdx].bindings;
+    binder_ = dSetMgr.CreateDescriptorSetBinder(dSetMgr.CreateDescriptorSet(bindings), bindings);
 }
 
 void RenderNodeSRDownsampleInit::ExecuteFrame(IRenderCommandList& cmdList)
 {
-    if (!valid_ || !config_.enabled) {
-        return;
-    }
-    
-    // Check resources
-    if (!RenderHandleUtil::IsValid(lrTexture_) || !RenderHandleUtil::IsValid(lrNormal_)) {
-        return;
-    }
-    
-    // Pass 0: Initialize LR texture (only once, on first frame)
     if (!config_.initialized) {
         DispatchDownsampleInit(cmdList);
         cmdList.AddCustomBarrierPoint();
@@ -164,61 +93,60 @@ void RenderNodeSRDownsampleInit::ExecuteFrame(IRenderCommandList& cmdList)
 
 void RenderNodeSRDownsampleInit::DispatchDownsampleInit(IRenderCommandList& cmdList)
 {
-    if (!RenderHandleUtil::IsValid(psos_.downsample) || !RenderHandleUtil::IsValid(baseColorBuffer_)) {
+    // Check resources
+    if (!RenderHandleUtil::IsValid(lrAlbedo_)
+        || !RenderHandleUtil::IsValid(lrNormal_)
+        || !RenderHandleUtil::IsValid(lrMaterial_)
+        || !RenderHandleUtil::IsValid(lrEmissive_)
+        || !RenderHandleUtil::IsValid(lrAo_)
+        || !RenderHandleUtil::IsValid(defaultSampler_)) {
         return;
     }
-    
-    cmdList.BindPipeline(psos_.downsample);
-    
-    // Fetch base color texture from material 1
-    const auto& renderDataStoreMgr = renderNodeContextMgr_->GetRenderDataStoreManager();
-    const auto* dataStoreMaterial = static_cast<CORE3D_NS::IRenderDataStoreDefaultMaterial*>(
-        renderDataStoreMgr.GetRenderDataStore("RenderDataStoreDefaultMaterial"));
-    const auto& materialHandles = dataStoreMaterial->GetMaterialHandles();
-    const auto& handles = materialHandles[1];
-    const RenderHandle baseColorImage = handles.images[0];
-    const RenderHandle normalImage = handles.images[1];
-    const RenderHandle baseColorSampler = handles.samplers[0];
-    // Bind: source=baseColorBuffer (G-Buffer), dest=lrTexture
-    downsampleBinder_->ClearBindings();
-    if (!RenderHandleUtil::IsValid(baseColorImage)) {
-        downsampleBinder_->BindImage(0, baseColorBuffer_);
-    } else {
-        downsampleBinder_->BindImage(0, baseColorImage);
+
+    if (!RenderHandleUtil::IsValid(psoHandle_)) {
+        return;
     }
-    if (!RenderHandleUtil::IsValid(normalImage)) {
-    } else {
-        downsampleBinder_->BindImage(4, normalImage);
-    }
-    if (!RenderHandleUtil::IsValid(baseColorSampler)) {
-        downsampleBinder_->BindSampler(1, sampler_);
-    } else {
-        downsampleBinder_->BindSampler(1, baseColorSampler);
-    }
-    downsampleBinder_->BindImage(2, lrTexture_);
-    downsampleBinder_->BindImage(3, lrNormal_);
-    
-    cmdList.UpdateDescriptorSet(downsampleBinder_->GetDescriptorSetHandle(),
-                                 downsampleBinder_->GetDescriptorSetLayoutBindingResources());
-    cmdList.BindDescriptorSet(0U, downsampleBinder_->GetDescriptorSetHandle());
+
+    cmdList.BindPipeline(psoHandle_);
+    binder_->ClearBindings();
+    binder_->BindSampler(0, defaultSampler_);
+    binder_->BindImage(1, rawAlbedo_);
+    binder_->BindImage(2, lrAlbedo_);
+    binder_->BindImage(3, rawNormal_);
+    binder_->BindImage(4, lrNormal_);
+    binder_->BindImage(5, rawMaterial_);
+    binder_->BindImage(6, lrMaterial_);
+    binder_->BindImage(7, rawEmissive_);
+    binder_->BindImage(8, lrEmissive_);
+    binder_->BindImage(9, rawAo_);
+    binder_->BindImage(10, lrAo_);
+    cmdList.UpdateDescriptorSet(binder_->GetDescriptorSetHandle(),
+                                binder_->GetDescriptorSetLayoutBindingResources());
+    cmdList.BindDescriptorSet(0U, binder_->GetDescriptorSetHandle());
     
     // Push constants
     struct PushConstantData {
-        float sourceWidth;
-        float sourceHeight;
-        float destWidth;
-        float destHeight;
+        uint32_t lrWidth;
+        uint32_t lrHeight;
     } pc;
-    pc.sourceWidth = static_cast<float>(config_.gtWidth);
-    pc.sourceHeight = static_cast<float>(config_.gtHeight);
-    pc.destWidth = static_cast<float>(config_.lrWidth);
-    pc.destHeight = static_cast<float>(config_.lrHeight);
+    pc.lrWidth = config_.lrWidth;
+    pc.lrHeight = config_.lrHeight;
     
     constexpr PushConstant pushConstant { ShaderStageFlagBits::CORE_SHADER_STAGE_COMPUTE_BIT, sizeof(PushConstantData) };
     cmdList.PushConstantData(pushConstant, arrayviewU8(pc));
     
     // Dispatch
-    const uint32_t groupX = (config_.lrWidth + psos_.downsampleTGS.x - 1) / psos_.downsampleTGS.x;
-    const uint32_t groupY = (config_.lrHeight + psos_.downsampleTGS.y - 1) / psos_.downsampleTGS.y;
+    const uint32_t groupX = config_.lrWidth / threadGroupSize_.x;
+    const uint32_t groupY = config_.lrHeight / threadGroupSize_.y;
     cmdList.Dispatch(groupX, groupY, 1);
+}
+
+IRenderNode* RenderNodeSRDownsampleInit::Create()
+{
+    return new RenderNodeSRDownsampleInit;
+}
+
+void RenderNodeSRDownsampleInit::Destroy(IRenderNode* instance)
+{
+    delete static_cast<RenderNodeSRDownsampleInit*>(instance);
 }
