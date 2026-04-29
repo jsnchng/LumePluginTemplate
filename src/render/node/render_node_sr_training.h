@@ -96,7 +96,6 @@ private:
     void DispatchDownsampleInit(IRenderCommandList& cmdList);
     
     // Per-frame passes
-    void DispatchClearGradient(IRenderCommandList& cmdList);
     void DispatchDifferentiableRender(IRenderCommandList& cmdList);
     void DispatchAdamOptimizer(IRenderCommandList& cmdList);
 

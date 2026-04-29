@@ -63,19 +63,16 @@ Uid CameraControlSystem::GetUid() const
 
 IPropertyHandle* CameraControlSystem::GetProperties()
 {
-    // TODO: Implement property handle for config if needed
     return nullptr;
 }
 
 const IPropertyHandle* CameraControlSystem::GetProperties() const
 {
-    // TODO: Implement property handle for config if needed
     return nullptr;
 }
 
 void CameraControlSystem::SetProperties(const IPropertyHandle& properties)
 {
-    // TODO: Parse properties to update config if needed
 }
 
 bool CameraControlSystem::IsActive() const
@@ -92,7 +89,6 @@ void CameraControlSystem::Initialize()
 {
     initialized_ = true;
     
-    // Auto-find main camera if targetCamera is not set
     if (!EntityUtil::IsValid(config_.targetCamera)) {
         FindMainCamera();
     }
@@ -106,7 +102,6 @@ void CameraControlSystem::FindMainCamera()
         return;
     }
     
-    // Iterate through all entities to find the main camera
     const auto& entityManager = ecs_->GetEntityManager();
     for (Entity entity : entityManager) {
         if (cameraManager->HasComponent(entity)) {
@@ -119,7 +114,6 @@ void CameraControlSystem::FindMainCamera()
         }
     }
     
-    // If no main camera found, use the first camera entity
     for (Entity entity : entityManager) {
         if (cameraManager->HasComponent(entity)) {
             config_.targetCamera = entity;
@@ -135,7 +129,6 @@ bool CameraControlSystem::Update(bool isFrameRenderingQueued, uint64_t time, uin
 {
     std::cout << "CameraControlSystem::Update" << std::endl;
     
-    // Try to find main camera if not set (may be created after Initialize)
     if (!EntityUtil::IsValid(config_.targetCamera)) {
         FindMainCamera();
         if (!EntityUtil::IsValid(config_.targetCamera)) {
@@ -172,17 +165,19 @@ const CameraControlSystem::Config& CameraControlSystem::GetConfig() const
 
 void CameraControlSystem::UpdateCameraPosition()
 {
-    // Only update camera position at specified intervals
-    if (frameCount_ % config_.switchInterval != 0) {
+    // Skip the first frame (frameCount_ == 0) - don't trigger view switch on initialization
+    // Also skip if not at switch interval
+    if (frameCount_ == 0 || frameCount_ % config_.switchInterval != 0) {
         return;
     }
     
-    // Random number generators for spherical position
+    viewSwitched_ = true;
+    std::cout << "CameraControlSystem: View switched! Flag set to notify render nodes." << std::endl;
+    
     static std::mt19937 gen(std::random_device{}());
     std::uniform_real_distribution<float> disZ(-1.0f, 1.0f);
     std::uniform_real_distribution<float> disTheta(0.0f, 2.0f * Math::PI);
     
-    // Generate random point on a sphere of radius orbitRadius
     float r = config_.orbitRadius;
     float z = disZ(gen);
     float phi = acos(z);
@@ -190,21 +185,16 @@ void CameraControlSystem::UpdateCameraPosition()
     
     Math::Vec3 pos(r * sin(phi) * cos(theta), r * sin(phi) * sin(theta), r * cos(phi));
     
-    // Calculate View matrix looking at origin (LookAt RH)
-    // Handle pole cases by adjusting up vector
     Math::Vec3 up = (abs(z) > 0.99f) ? Math::Vec3(1.f, 0.f, 0.f) : Math::Vec3(0.f, 1.f, 0.f);
     Math::Mat4X4 view = Math::LookAtRh(pos, Math::Vec3(0.f, 0.f, 0.f), up);
     
-    // Convert View matrix to World matrix by inversion
     Math::Mat4X4 world = Math::Inverse(view);
     
-    // Decompose matrix to get position and orientation
     Math::Vec3 s, t, sk;
     Math::Quat q;
     Math::Vec4 p;
     Math::Decompose(world, s, q, t, sk, p);
     
-    // Get transform component manager and update camera
     auto* transformManager = GetManager<ITransformComponentManager>(*ecs_);
     if (transformManager) {
         auto handle = transformManager->Write(config_.targetCamera);

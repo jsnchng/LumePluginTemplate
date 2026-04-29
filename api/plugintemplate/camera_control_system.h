@@ -79,6 +79,14 @@ public:
      * @return Current configuration.
      */
     const Config& GetConfig() const;
+    
+    /** Check if camera view has switched this frame.
+     * @return True if view switched, false otherwise.
+     */
+    inline bool HasViewSwitched() const { return viewSwitched_; }
+    
+    /** Clear the view switched flag (called after processing). */
+    inline void ClearViewSwitchedFlag() { viewSwitched_ = false; }
 
     /** Factory methods for system creation/destruction. */
     static CORE_NS::ISystem* Create(CORE_NS::IEcs& ecs);
@@ -93,6 +101,7 @@ private:
     uint32_t frameCount_ = 0;
     bool active_ = true;
     bool initialized_ = false;
+    bool viewSwitched_ = false;  // Flag indicating camera view switched this frame
 };
 
 /** Return name of this system. */

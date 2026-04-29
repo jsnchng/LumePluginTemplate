@@ -37,7 +37,7 @@ public:
     ~RenderNodeSRClearGradient() override = default;
 
     void InitNode(IRenderNodeContextManager& renderNodeContextMgr) override;
-    void PreExecuteFrame() override {};
+    void PreExecuteFrame() override;
     void ExecuteFrame(IRenderCommandList& cmdList) override;
     ExecuteFlags GetExecuteFlags() const override { return 0U; }
 
@@ -47,8 +47,18 @@ public:
 private:
     IRenderNodeContextManager* renderNodeContextMgr_ { nullptr };
 
-    // The single image we write to
+    // Gradient buffer (cleared every frame)
     RenderHandle lrGradient_;
+    
+    // Loss and debug outputs (cleared on view switch)
+    RenderHandle lossOutput_;
+    RenderHandle debugOutput_;
+    RenderHandle predictedBaseColor_;
+    RenderHandle dL_dBaseColor_;
+    
+    // Adam optimizer momentum buffers (cleared on view switch)
+    RenderHandle lrMomentum1_;
+    RenderHandle lrMomentum2_;
 
     // Pipeline
     RenderHandle pso_;
@@ -56,6 +66,15 @@ private:
 
     // Descriptor set binder
     IDescriptorSetBinder::Ptr binder_;
+    
+    // View switch flag (set in PreExecuteFrame, used in ExecuteFrame)
+    bool viewSwitched_ { false };
+    
+    // Image dimensions for dispatch
+    uint32_t gtWidth_ { 1024 };
+    uint32_t gtHeight_ { 1024 };
+    uint32_t lrWidth_ { 512 };
+    uint32_t lrHeight_ { 512 };
 
     bool valid_ { false };
 };

@@ -15,6 +15,8 @@
 
 #include "render_node_sr_clear_gradient.h"
 
+#include <render/datastore/intf_render_data_store_manager.h>
+#include <render/datastore/intf_render_data_store_pod.h>
 #include <render/device/intf_gpu_resource_manager.h>
 #include <render/device/intf_shader_manager.h>
 #include <render/nodecontext/intf_node_context_descriptor_set_manager.h>
@@ -23,6 +25,9 @@
 #include <render/nodecontext/intf_render_node_context_manager.h>
 #include <render/nodecontext/intf_render_node_graph_share_manager.h>
 #include <render/nodecontext/intf_render_node_util.h>
+
+// Temporarily disable PLUGIN_LOG due to crash issue
+#define PLUGIN_LOG_I(...) do {} while (0)
 
 using namespace BASE_NS;
 using namespace RENDER_NS;
@@ -41,15 +46,34 @@ void RenderNodeSRClearGradient::InitNode(IRenderNodeContextManager& renderNodeCo
 {
     renderNodeContextMgr_ = &renderNodeContextMgr;
 
-    // 1. Get the lr_gradient image from the render node graph share manager
+    // Get all image handles from the render node graph share manager
     IRenderNodeGraphShareManager& rngShareMgr = renderNodeContextMgr.GetRenderNodeGraphShareManager();
     lrGradient_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_gradient");
+    lossOutput_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "loss_output");
+    debugOutput_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "debugOutput");
+    predictedBaseColor_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "predicted_base_color");
+    dL_dBaseColor_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "testColor");
+    lrMomentum1_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_momentum1");
+    lrMomentum2_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_momentum2");
 
     if (!RenderHandleUtil::IsValid(lrGradient_)) {
         return;
     }
 
-    // 2. Load the compute shader and create PSO
+    // Get image dimensions from gradient buffer
+    const IRenderNodeGpuResourceManager& gpuResourceMgr = renderNodeContextMgr.GetGpuResourceManager();
+    const GpuImageDesc gradientDesc = gpuResourceMgr.GetImageDescriptor(lrGradient_);
+    lrWidth_ = gradientDesc.width;
+    lrHeight_ = gradientDesc.height;
+    
+    // Get GT dimensions from loss output
+    if (RenderHandleUtil::IsValid(lossOutput_)) {
+        const GpuImageDesc lossDesc = gpuResourceMgr.GetImageDescriptor(lossOutput_);
+        gtWidth_ = lossDesc.width;
+        gtHeight_ = lossDesc.height;
+    }
+
+    // Load the compute shader and create PSO
     auto& shaderMgr = renderNodeContextMgr.GetShaderManager();
     auto& psoMgr = renderNodeContextMgr.GetPsoManager();
     INodeContextDescriptorSetManager& dSetMgr = renderNodeContextMgr.GetDescriptorSetManager();
@@ -63,40 +87,95 @@ void RenderNodeSRClearGradient::InitNode(IRenderNodeContextManager& renderNodeCo
     pso_ = psoMgr.GetComputePsoHandle(shaderHandle, pl, {});
     threadGroupSize_ = shaderMgr.GetReflectionThreadGroupSize(shaderHandle);
 
-    // 3. Reserve descriptor sets
+    // Reserve descriptor sets
     const auto& renderNodeUtil = renderNodeContextMgr.GetRenderNodeUtil();
     const DescriptorCounts dc = renderNodeUtil.GetDescriptorCounts(pl);
     dSetMgr.ResetAndReserve(dc);
 
-    // 4. Create descriptor set binder (set 0 only)
+    // Create descriptor set binder (set 0 only)
     constexpr uint32_t setIdx = 0U;
     const auto& bindings = pl.descriptorSetLayouts[setIdx].bindings;
     binder_ = dSetMgr.CreateDescriptorSetBinder(dSetMgr.CreateDescriptorSet(bindings), bindings);
 
     valid_ = true;
+    PLUGIN_LOG_I("RenderNodeSRClearGradient: Initialized");
+}
+
+void RenderNodeSRClearGradient::PreExecuteFrame()
+{
+    // Check for view switch flag from RenderDataStorePod
+    const auto& renderDataStoreMgr = renderNodeContextMgr_->GetRenderDataStoreManager();
+    auto* dataStorePod = static_cast<IRenderDataStorePod*>(
+        renderDataStoreMgr.GetRenderDataStore("RenderDataStorePod"));
+    
+    if (dataStorePod) {
+        auto flagData = dataStorePod->Get("ViewSwitchFlag");
+        if (!flagData.empty()) {
+            struct ViewSwitchFlag {
+                uint32_t shouldClearBuffers;
+            };
+            const ViewSwitchFlag* flag = reinterpret_cast<const ViewSwitchFlag*>(flagData.data());
+            
+            if (flag && flag->shouldClearBuffers == 1) {
+                viewSwitched_ = true;
+                PLUGIN_LOG_I("RenderNodeSRClearGradient: View switch detected");
+            }
+            
+            // Always destroy the Pod flag after reading it, to ensure it only affects one frame
+            dataStorePod->DestroyPod("SRTraining", "ViewSwitchFlag");
+        }
+    }
 }
 
 void RenderNodeSRClearGradient::ExecuteFrame(IRenderCommandList& cmdList)
 {
-    if (!valid_ || !RenderHandleUtil::IsValid(lrGradient_) || !RenderHandleUtil::IsValid(pso_)) {
+    if (!valid_ || !RenderHandleUtil::IsValid(pso_)) {
         return;
     }
 
     // Bind pipeline
     cmdList.BindPipeline(pso_);
 
-    // Bind image to set 0, binding 0
+    // Bind all images
     binder_->ClearBindings();
     binder_->BindImage(0, lrGradient_);
+    binder_->BindImage(1, lossOutput_);
+    binder_->BindImage(2, debugOutput_);
+    binder_->BindImage(3, predictedBaseColor_);
+    binder_->BindImage(4, dL_dBaseColor_);
+    binder_->BindImage(5, lrMomentum1_);
+    binder_->BindImage(6, lrMomentum2_);
 
     cmdList.UpdateDescriptorSet(binder_->GetDescriptorSetHandle(),
                                 binder_->GetDescriptorSetLayoutBindingResources());
     cmdList.BindDescriptorSet(0U, binder_->GetDescriptorSetHandle());
 
-    // Dispatch based on image size
-    const IRenderNodeGpuResourceManager& gpuResourceMgr = renderNodeContextMgr_->GetGpuResourceManager();
-    const GpuImageDesc desc = gpuResourceMgr.GetImageDescriptor(lrGradient_);
-    const uint32_t groupX = (desc.width + threadGroupSize_.x - 1u) / threadGroupSize_.x;
-    const uint32_t groupY = (desc.height + threadGroupSize_.y - 1u) / threadGroupSize_.y;
+    // Push constants
+    struct PushConstantData {
+        uint32_t shouldClearBuffers;  // 1 = clear all buffers (view switch), 0 = only clear gradient
+        uint32_t gtWidth;
+        uint32_t gtHeight;
+        uint32_t lrWidth;
+        uint32_t lrHeight;
+    } pc;
+    
+    pc.shouldClearBuffers = viewSwitched_ ? 1u : 0u;
+    pc.gtWidth = gtWidth_;
+    pc.gtHeight = gtHeight_;
+    pc.lrWidth = lrWidth_;
+    pc.lrHeight = lrHeight_;
+    
+    constexpr PushConstant pushConstant { ShaderStageFlagBits::CORE_SHADER_STAGE_COMPUTE_BIT, sizeof(PushConstantData) };
+    cmdList.PushConstantData(pushConstant, arrayviewU8(pc));
+
+    // Dispatch based on max size needed (GT size for clearing all buffers)
+    const uint32_t groupX = (gtWidth_ + threadGroupSize_.x - 1u) / threadGroupSize_.x;
+    const uint32_t groupY = (gtHeight_ + threadGroupSize_.y - 1u) / threadGroupSize_.y;
     cmdList.Dispatch(groupX, groupY, 1u);
+    
+    // Reset flag after use
+    if (viewSwitched_) {
+        viewSwitched_ = false;
+        PLUGIN_LOG_I("RenderNodeSRClearGradient: Buffers cleared via shader");
+    }
 }

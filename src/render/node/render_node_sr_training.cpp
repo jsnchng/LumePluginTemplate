@@ -17,6 +17,7 @@
 
 #include <3d/render/intf_render_data_store_default_material.h>
 #include <render/datastore/intf_render_data_store_manager.h>
+#include <render/datastore/intf_render_data_store_pod.h>
 #include <render/device/intf_gpu_resource_manager.h>
 #include <render/device/intf_shader_manager.h>
 #include <render/nodecontext/intf_node_context_descriptor_set_manager.h>
@@ -62,6 +63,7 @@ void RenderNodeSRTraining::InitNode(IRenderNodeContextManager& renderNodeContext
 
 void RenderNodeSRTraining::PreExecuteFrame()
 {
+    // Note: View switch flag handling moved to RenderNodeSRClearGradient
     config_.iteration++;
 }
 
@@ -173,16 +175,7 @@ void RenderNodeSRTraining::CreatePsos()
     // prevent BindDescriptorSet crash by calling ResetAndReserve
     DescriptorCounts totalCounts;
     const auto& renderNodeUtil = renderNodeContextMgr_->GetRenderNodeUtil();
-    // {
-        // RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/sr_downsample_init.shader");
-        // if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
-            // const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
-            // const auto& counts = renderNodeUtil.GetDescriptorCounts(pl);
-            // for (auto count : counts.counts) {
-                // totalCounts.counts.push_back(count);
-            // }
-        // }
-    // }
+    // Note: sr_clear_gradient.shader is loaded by RenderNodeSRClearGradient
     {
         RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/sr_differentiable_render.shader");
         if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
@@ -205,20 +198,7 @@ void RenderNodeSRTraining::CreatePsos()
     }
     dSetMgr.ResetAndReserve(totalCounts);
 
-    // Load downsample shader (for LR texture initialization)
-    // {
-        // RenderHandle shaderHandle = shaderMgr.GetShaderHandle("pt://shaders/computeshader/sr_downsample_init.shader");
-        // if (RenderHandleUtil::GetHandleType(shaderHandle) == RenderHandleType::COMPUTE_SHADER_STATE_OBJECT) {
-            // const PipelineLayout& pl = shaderMgr.GetReflectionPipelineLayout(shaderHandle);
-            // psos_.downsample = psoMgr.GetComputePsoHandle(shaderHandle, pl, {});
-            // psos_.downsampleTGS = shaderMgr.GetReflectionThreadGroupSize(shaderHandle);
-            
-            // const auto& binds = pl.descriptorSetLayouts[localSetIdx].bindings;
-            // downsampleBinder_ = dSetMgr.CreateDescriptorSetBinder(dSetMgr.CreateDescriptorSet(binds), binds);
-            
-            // PLUGIN_LOG_I("RenderNodeSRTraining: Downsample shader loaded");
-        // }
-    // }
+    // Note: Clear gradient shader is loaded by RenderNodeSRClearGradient
     
     // Load differentiable render shader
     {
@@ -265,6 +245,9 @@ void RenderNodeSRTraining::ExecuteFrame(IRenderCommandList& cmdList)
         return;
     }
     
+    // Note: View switch buffer clearing is handled by RenderNodeSRClearGradient
+    // which runs before this node in the render node graph
+    
     // Pass 0: Initialize LR texture (only once, on first frame)
     // DispatchDownsampleInit(cmdList);
     // cmdList.AddCustomBarrierPoint();
@@ -273,11 +256,7 @@ void RenderNodeSRTraining::ExecuteFrame(IRenderCommandList& cmdList)
         // PLUGIN_LOG_I("RenderNodeSRTraining: LR texture initialized from GT base_color");
     // }
     
-    // Pass 1: Clear gradient buffer
-    DispatchClearGradient(cmdList);
-    cmdList.AddCustomBarrierPoint();
-    
-    // Pass 2: Differentiable render (forward + loss + backward)
+    // Pass 1: Differentiable render (forward + loss + backward)
     DispatchDifferentiableRender(cmdList);
     cmdList.AddCustomBarrierPoint();
     
@@ -340,13 +319,6 @@ void RenderNodeSRTraining::DispatchDownsampleInit(IRenderCommandList& cmdList)
     const uint32_t groupX = (config_.lrWidth + psos_.downsampleTGS.x - 1) / psos_.downsampleTGS.x;
     const uint32_t groupY = (config_.lrHeight + psos_.downsampleTGS.y - 1) / psos_.downsampleTGS.y;
     cmdList.Dispatch(groupX, groupY, 1);
-}
-
-void RenderNodeSRTraining::DispatchClearGradient(IRenderCommandList& cmdList)
-{
-    // Gradient buffer is cleared by Adam optimizer at the end of each iteration
-    // (see sr_adam_optimizer.comp: imageStore(uGradient, coord, vec4(0.0)))
-    // No separate clear pass needed - Adam clears after using the gradient
 }
 
 void RenderNodeSRTraining::DispatchDifferentiableRender(IRenderCommandList& cmdList)
@@ -517,3 +489,4 @@ void RenderNodeSRTraining::DispatchAdamOptimizer(IRenderCommandList& cmdList)
     const uint32_t groupY = (config_.lrHeight + psos_.adamTGS.y - 1) / psos_.adamTGS.y;
     cmdList.Dispatch(groupX, groupY, 1);
 }
+
