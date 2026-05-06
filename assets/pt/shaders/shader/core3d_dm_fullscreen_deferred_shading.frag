@@ -571,6 +571,208 @@ vec3 BackwardPbrBasicWithLRBaseColor(float depthBufferSample, FullGBufferData fd
     return gradient;
 }
 
+// Helper: evaluate direct lighting for a given normal (for finite-difference gradient)
+vec3 evalDirectLightingForNormal(vec3 N, InputBrdfData brdfData, vec3 worldPos, vec3 V, uint mf) {
+    float NoV = clamp(dot(N, V), CORE3D_PBR_LIGHTING_EPSILON, 1.0);
+    ShadingData sd;
+    sd.pos = worldPos; sd.N = N; sd.NoV = NoV; sd.V = V;
+    sd.f0 = brdfData.f0; sd.alpha2 = brdfData.alpha2; sd.diffuseColor = brdfData.diffuseColor;
+    if ((mf & CORE_MATERIAL_PUNCTUAL_LIGHT_RECEIVER_BIT) == CORE_MATERIAL_PUNCTUAL_LIGHT_RECEIVER_BIT) {
+        return CalculateLighting(sd, mf);
+    }
+    return vec3(0.0);
+}
+
+vec3 BackwardPbrNormal(float depthBufferSample, FullGBufferData fd,
+    vec3 predictedRGB, vec3 referenceRGB)
+{
+    GetSampledGBuffer(inUv, fd);
+    vec4 GBUv = subpassLoad(uGBufferUv);
+    vec3 lrN = normalize(textureLod(sampler2D(uLRTexture, uLRSamplerRepeat), GBUv.xy, 0).xyz * 2.0 - 1.0);
+    InputBrdfData brdfData = CalcBRDFMetallicRoughness(fd.baseColor, fd.material);
+    uint ci = GetUnpackCameraIndex(uGeneralData);
+    vec3 wp = GetWorldPos(ci, depthBufferSample, inUv.xy);
+    vec3 V = normalize(uCameras[ci].viewInv[3].xyz - wp);
+    const float e = 0.002;
+    const float inv2e = 1.0 / (2.0 * e);
+    vec3 Cpx = evalDirectLightingForNormal(normalize(lrN+vec3(e,0,0)), brdfData, wp, V, fd.materialFlags);
+    vec3 Cmx = evalDirectLightingForNormal(normalize(lrN-vec3(e,0,0)), brdfData, wp, V, fd.materialFlags);
+    vec3 Cpy = evalDirectLightingForNormal(normalize(lrN+vec3(0,e,0)), brdfData, wp, V, fd.materialFlags);
+    vec3 Cmy = evalDirectLightingForNormal(normalize(lrN-vec3(0,e,0)), brdfData, wp, V, fd.materialFlags);
+    vec3 Cpz = evalDirectLightingForNormal(normalize(lrN+vec3(0,0,e)), brdfData, wp, V, fd.materialFlags);
+    vec3 Cmz = evalDirectLightingForNormal(normalize(lrN-vec3(0,0,e)), brdfData, wp, V, fd.materialFlags);
+    vec3 dL_dC = predictedRGB - referenceRGB;
+    return vec3(dot(dL_dC,(Cpx-Cmx)*inv2e), dot(dL_dC,(Cpy-Cmy)*inv2e), dot(dL_dC,(Cpz-Cmz)*inv2e));
+}
+
+// Compute dLoss/dLREmissive for the current pixel.
+// Emissive is simply added to the final color: color += LREmissive,
+// so dColor/dLREmissive = I (identity). The gradient is just dLoss/dC.
+vec3 BackwardPbrBasicWithLREmissive(float depthBufferSample, FullGBufferData fd,
+    vec3 predictedRGB, vec3 referenceRGB)
+{
+    // Emissive contributes additively to the final color:
+    //   finalColor = pbrLighting + LREmissive
+    // Therefore: dFinalColor/dLREmissive = vec3(1.0)
+    // And: dLoss/dLREmissive = dLoss/dC * dC/dLREmissive = dLoss/dC * 1
+    vec3 dL_dC = predictedRGB - referenceRGB;
+    return dL_dC;
+}
+
+// Compute dLoss/dLRMetallicRoughness for the current pixel.
+// LR texture stores (metallic, roughness) in (r, g) channels.
+// These affect the BRDF through CalcBRDFMetallicRoughness:
+//   f0 = mix(r0, baseColor, m)
+//   diffuseColor = mix(baseColor * (1 - f0), 0, m)
+//   roughness -> alpha2 = (roughness^2)^2
+// We differentiate through all lighting contributions analytically.
+vec3 BackwardPbrBasicWithLRmetallicRoughness(float depthBufferSample, FullGBufferData fd,
+    vec3 predictedRGB, vec3 referenceRGB)
+{
+    GetSampledGBuffer(inUv, fd);
+
+    // --- Reconstruct inputs (mirrors PbrBasicWithLRBaseColor) ---
+    vec4 GBufferUv = subpassLoad(uGBufferUv);
+    // LR metallic-roughness texture: .r = metallic, .g = roughness
+    vec2 LRMetallicRoughness = textureLod(sampler2D(uLRTexture, uLRSamplerRepeat), GBufferUv.xy, 0).rg;
+    float m = clamp(LRMetallicRoughness.r, 0.0, 1.0);  // metallic from LR
+    float r = clamp(LRMetallicRoughness.g, CORE_BRDF_MIN_ROUGHNESS, 1.0); // roughness from LR
+    float r0 = fd.material.a; // dielectric reflectance (typically 0.04)
+    vec3 B = fd.baseColor.rgb; // base color from G-Buffer (not optimized here)
+
+    // Reconstruct BRDF data with LR metallic/roughness
+    vec4 matOverride = fd.material;
+    matOverride.b = m;
+    matOverride.g = r;
+    InputBrdfData brdfData = CalcBRDFMetallicRoughness(fd.baseColor, matOverride);
+
+    const uint cameraIdx = GetUnpackCameraIndex(uGeneralData);
+    const vec3 worldPos = GetWorldPos(cameraIdx, depthBufferSample, inUv.xy);
+    const vec3 camWorldPos = uCameras[cameraIdx].viewInv[3].xyz;
+    const vec3 V = normalize(camWorldPos - worldPos);
+    const float NoV = clamp(dot(fd.normal, V), CORE3D_PBR_LIGHTING_EPSILON, 1.0);
+    CORE_RELAXEDP const float roughness = brdfData.roughness;
+
+    ShadingData shadingData;
+    shadingData.pos = worldPos;
+    shadingData.N = fd.normal;
+    shadingData.NoV = NoV;
+    shadingData.V = V;
+    shadingData.f0 = brdfData.f0;
+    shadingData.alpha2 = brdfData.alpha2;
+    shadingData.diffuseColor = brdfData.diffuseColor;
+
+    // ============================================================
+    // Gradient w.r.t. metallic (m)
+    // ============================================================
+    // From CalcBRDFMetallicRoughness:
+    //   f0 = mix(r0, B, m)  = r0*(1-m) + B*m
+    //   diffuseColor = mix(B*(1 - f0), 0, m) = (1-m) * B * (1 - f0)
+    //
+    // df0/dm = B - r0  (per channel)
+    // d(diffuseColor)/dm = -B*(1 - f0) + (1-m)*B*(B - r0)
+    //                    = B * [-(1-f0) + (1-m)*(B - r0)]
+    vec3 df0_dm = B - vec3(r0);
+    vec3 f0_val = brdfData.f0.xyz;
+    vec3 dDc_dm = B * (-(1.0 - f0_val) + (1.0 - m) * (B - vec3(r0)));
+
+    // === Accumulate direct lighting gradient intermediates ===
+    vec3 diffuseLightAccum = vec3(0.0);
+    vec3 specularDGAccum = vec3(0.0);
+    if ((fd.materialFlags & CORE_MATERIAL_PUNCTUAL_LIGHT_RECEIVER_BIT) == CORE_MATERIAL_PUNCTUAL_LIGHT_RECEIVER_BIT) {
+        CalculateLightingBackward(shadingData, fd.materialFlags, diffuseLightAccum, specularDGAccum);
+    }
+
+    // === Add indirect lighting (IBL) gradient ===
+    if ((fd.materialFlags & CORE_MATERIAL_INDIRECT_LIGHT_RECEIVER_BIT) == CORE_MATERIAL_INDIRECT_LIGHT_RECEIVER_BIT) {
+        vec3 irradianceSample = CoreGetIrradianceSample(shadingData.N);
+        diffuseLightAccum += irradianceSample * fd.ao;
+
+        const vec3 worldReflect = reflect(-shadingData.V, shadingData.N);
+        vec3 radianceSample = CoreGetRadianceSample(worldReflect, roughness);
+        float horizonOcc = fd.ao * SpecularHorizonOcclusion(worldReflect, fd.normal);
+
+        // d(EnvBRDFApprox)/d(f0) ≈ ab.x
+        const vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
+        const vec4 c1 = vec4(1.0, 0.0425, 1.04, -0.04);
+        vec4 rv = roughness * c0 + c1;
+        float a004 = min(rv.x * rv.x, exp2(-9.28 * NoV)) * rv.x + rv.y;
+        float ab_x = -1.04 * a004 + rv.z;
+
+        specularDGAccum += ab_x * radianceSample * horizonOcc;
+    }
+
+    // dC/dm = diffuseLightAccum · dDc_dm + specularDGAccum · df0_dm
+    // (dot product per channel, i.e. element-wise multiply then sum over color channels)
+    float dC_dm = dot(diffuseLightAccum, dDc_dm) + dot(specularDGAccum, df0_dm);
+
+    // ============================================================
+    // Gradient w.r.t. roughness (r)
+    // ============================================================
+    // roughness affects alpha2 = (r^2)^2 = r^4
+    // d(alpha2)/dr = 4 * r^3
+    // Use finite differences for the specular terms through D and G,
+    // since analytical differentiation of dGGX and vGGX w.r.t. alpha2 is complex.
+    const float eps = 0.002;
+    float r_plus  = clamp(r + eps, CORE_BRDF_MIN_ROUGHNESS, 1.0);
+    float r_minus = clamp(r - eps, CORE_BRDF_MIN_ROUGHNESS, 1.0);
+
+    // Evaluate forward pass with r+eps
+    vec4 matPlus = matOverride;
+    matPlus.g = r_plus;
+    InputBrdfData brdfPlus = CalcBRDFMetallicRoughness(fd.baseColor, matPlus);
+    ShadingData sdPlus = shadingData;
+    sdPlus.alpha2 = brdfPlus.alpha2;
+    sdPlus.f0 = brdfPlus.f0;
+    sdPlus.diffuseColor = brdfPlus.diffuseColor;
+    vec3 colorPlus = vec3(0.0);
+    if ((fd.materialFlags & CORE_MATERIAL_PUNCTUAL_LIGHT_RECEIVER_BIT) == CORE_MATERIAL_PUNCTUAL_LIGHT_RECEIVER_BIT) {
+        colorPlus = CalculateLighting(sdPlus, fd.materialFlags);
+    }
+    if ((fd.materialFlags & CORE_MATERIAL_INDIRECT_LIGHT_RECEIVER_BIT) == CORE_MATERIAL_INDIRECT_LIGHT_RECEIVER_BIT) {
+        vec3 irr = CoreGetIrradianceSample(sdPlus.N) * sdPlus.diffuseColor * fd.ao;
+        const vec3 wr = reflect(-sdPlus.V, sdPlus.N);
+        vec3 fInd = EnvBRDFApprox(sdPlus.f0.xyz, brdfPlus.roughness, NoV);
+        vec3 radSamp = CoreGetRadianceSample(wr, brdfPlus.roughness);
+        vec3 rad = radSamp * fInd;
+        rad *= fd.ao * SpecularHorizonOcclusion(wr, fd.normal);
+        colorPlus += (irr + rad);
+    }
+
+    // Evaluate forward pass with r-eps
+    vec4 matMinus = matOverride;
+    matMinus.g = r_minus;
+    InputBrdfData brdfMinus = CalcBRDFMetallicRoughness(fd.baseColor, matMinus);
+    ShadingData sdMinus = shadingData;
+    sdMinus.alpha2 = brdfMinus.alpha2;
+    sdMinus.f0 = brdfMinus.f0;
+    sdMinus.diffuseColor = brdfMinus.diffuseColor;
+    vec3 colorMinus = vec3(0.0);
+    if ((fd.materialFlags & CORE_MATERIAL_PUNCTUAL_LIGHT_RECEIVER_BIT) == CORE_MATERIAL_PUNCTUAL_LIGHT_RECEIVER_BIT) {
+        colorMinus = CalculateLighting(sdMinus, fd.materialFlags);
+    }
+    if ((fd.materialFlags & CORE_MATERIAL_INDIRECT_LIGHT_RECEIVER_BIT) == CORE_MATERIAL_INDIRECT_LIGHT_RECEIVER_BIT) {
+        vec3 irr = CoreGetIrradianceSample(sdMinus.N) * sdMinus.diffuseColor * fd.ao;
+        const vec3 wr = reflect(-sdMinus.V, sdMinus.N);
+        vec3 fInd = EnvBRDFApprox(sdMinus.f0.xyz, brdfMinus.roughness, NoV);
+        vec3 radSamp = CoreGetRadianceSample(wr, brdfMinus.roughness);
+        vec3 rad = radSamp * fInd;
+        rad *= fd.ao * SpecularHorizonOcclusion(wr, fd.normal);
+        colorMinus += (irr + rad);
+    }
+
+    // dC/dr via central differences
+    vec3 dC_dr_vec = (colorPlus - colorMinus) / (r_plus - r_minus);
+
+    // === Chain rule: dLoss/d(m,r) = dLoss/dC * dC/d(m,r) ===
+    vec3 dL_dC = predictedRGB - referenceRGB;
+    float grad_m = dot(dL_dC, vec3(dC_dm));
+    float grad_r = dot(dL_dC, dC_dr_vec);
+
+    // Return gradient as vec3: (dLoss/dMetallic, dLoss/dRoughness, 0)
+    return vec3(grad_m, grad_r, 0.0);
+}
+
 /*
 fragment shader for basic pbr materials.
 */

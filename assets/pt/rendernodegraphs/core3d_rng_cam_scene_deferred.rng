@@ -164,7 +164,7 @@
                     "format": "r8g8b8a8_unorm",
                     "width": 512,
                     "height": 512,
-                    "usageFlags": "sampled | storage",
+                    "usageFlags": "sampled | storage | transfer_src",
                     "memoryPropertyFlags": "device_local",
                     "engineCreationFlags": "dynamic_barriers"
                 },

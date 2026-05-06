@@ -30,7 +30,7 @@ void main() {
     vec2 uv = (vec2(destCoord) + 0.5) / vec2(destSize);
 
     vec4 albedo = textureLod(sampler2D(rawAlbedo, defaultSampler), uv, 0.0);
-    albedo = vec4(0.2, 0.2, 0.2, 1.0); // for debug
+    // albedo = vec4(0.2, 0.2, 0.2, 1.0); // for debug
     vec4 normal = textureLod(sampler2D(rawNormal, defaultSampler), uv, 0.0);
     vec4 material = textureLod(sampler2D(rawMaterial, defaultSampler), uv, 0.0);
     vec4 emissive = textureLod(sampler2D(rawEmissive, defaultSampler), uv, 0.0);
