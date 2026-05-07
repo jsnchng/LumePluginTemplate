@@ -73,8 +73,8 @@ private:
     // Image dimensions for dispatch
     uint32_t gtWidth_ { 1024 };
     uint32_t gtHeight_ { 1024 };
-    uint32_t lrWidth_ { 512 };
-    uint32_t lrHeight_ { 512 };
+    uint32_t lrWidth_ { 1024 };
+    uint32_t lrHeight_ { 1024 };
 
     bool valid_ { false };
 };

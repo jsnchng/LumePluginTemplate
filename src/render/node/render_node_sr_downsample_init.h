@@ -33,8 +33,8 @@ public:
 
     // Configuration
     struct Config {
-        uint32_t lrWidth = 512;
-        uint32_t lrHeight = 512;
+        uint32_t lrWidth = 1024;
+        uint32_t lrHeight = 1024;
         bool initialized = false;  // Track if LR texture has been initialized
     };
 

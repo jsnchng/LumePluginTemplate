@@ -70,8 +70,8 @@ public:
         uint32_t iteration = 0;
         uint32_t gtWidth = 1024;
         uint32_t gtHeight = 1024;
-        uint32_t lrWidth = 512;
-        uint32_t lrHeight = 512;
+        uint32_t lrWidth = 1024;
+        uint32_t lrHeight = 1024;
         float lossScale = 1.0f;
         bool enabled = true;
         bool initialized = false;  // Track if LR texture has been initialized
