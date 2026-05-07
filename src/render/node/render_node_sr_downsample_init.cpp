@@ -56,6 +56,7 @@ void RenderNodeSRDownsampleInit::InitNode(IRenderNodeContextManager& renderNodeC
     // Get default sampler
     const auto& gpuResourceMgr = renderNodeContextMgr_->GetGpuResourceManager();
     defaultSampler_ = gpuResourceMgr.GetSamplerHandle(defaultSamplerName);
+    defaultMaterialImage_ = rngShareMgr.GetRegisteredRenderNodeOutput(shareNameFromNode, "default_1x1_white");
 
     constexpr uint32_t localSetIdx = 0U;
     const auto& renderNodeUtil = renderNodeContextMgr_->GetRenderNodeUtil();
@@ -101,6 +102,23 @@ void RenderNodeSRDownsampleInit::DispatchDownsampleInit(IRenderCommandList& cmdL
         || !RenderHandleUtil::IsValid(lrAo_)
         || !RenderHandleUtil::IsValid(defaultSampler_)) {
         return;
+    }
+
+    // Replace invalid handles with default material image
+    if (!RenderHandleUtil::IsValid(rawAlbedo_)) {
+        rawAlbedo_ = defaultMaterialImage_;
+    }
+    if (!RenderHandleUtil::IsValid(rawNormal_)) {
+        rawNormal_ = defaultMaterialImage_;
+    }
+    if (!RenderHandleUtil::IsValid(rawMaterial_)) {
+        rawMaterial_ = defaultMaterialImage_;
+    }
+    if (!RenderHandleUtil::IsValid(rawEmissive_)) {
+        rawEmissive_ = defaultMaterialImage_;
+    }
+    if (!RenderHandleUtil::IsValid(rawAo_)) {
+        rawAo_ = defaultMaterialImage_;
     }
 
     if (!RenderHandleUtil::IsValid(psoHandle_)) {

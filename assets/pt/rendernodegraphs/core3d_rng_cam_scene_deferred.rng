@@ -207,6 +207,16 @@
                     "usageFlags": "sampled | storage",
                     "memoryPropertyFlags": "device_local",
                     "engineCreationFlags": "dynamic_barriers"
+                },
+                {
+                    "name": "default_1x1_white",
+                    "shareName": "default_1x1_white",
+                    "format": "r8g8b8a8_unorm",
+                    "width": 1,
+                    "height": 1,
+                    "usageFlags": "sampled | storage",
+                    "memoryPropertyFlags": "device_local",
+                    "engineCreationFlags": "dynamic_barriers"
                 }
             ]
         },

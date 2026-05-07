@@ -63,6 +63,7 @@ private:
     RenderHandle lrAo_;
 
     RenderHandle defaultSampler_;
+    RenderHandle defaultMaterialImage_;
 
     RenderHandle psoHandle_;
     ShaderThreadGroup threadGroupSize_{ 1u, 1u, 1u };
