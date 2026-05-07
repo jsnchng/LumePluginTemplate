@@ -107,7 +107,7 @@
             }
         },
         {
-            "displayName": "Default Deferred with UV Output",
+            "displayName": "Default Deferred with Uv Output",
             "variantName": "OPAQUE_DF",
             "renderSlot": "CORE3D_RS_DM_DF_OPAQUE",
             "renderSlotDefaultShader": true,

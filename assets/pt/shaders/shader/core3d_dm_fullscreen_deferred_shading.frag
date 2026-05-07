@@ -34,6 +34,9 @@ layout(input_attachment_index = 0, set = 1, binding = 4) uniform subpassInput uG
 layout(set = 2, binding = 0) uniform texture2D uLRTexture;
 layout(set = 2, binding = 1) uniform sampler uLRSamplerRepeat;
 layout(set = 2, binding = 2) uniform texture2D uLRNormal;
+layout(set = 2, binding = 3) uniform uMaskUbo {
+    uint uMaskFlags;
+};
 
 // unpack gbuffer
 

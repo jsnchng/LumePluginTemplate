@@ -132,8 +132,7 @@ void PbrBasic()
     emissive = emissive * baseColor.a; // needs to be multiplied with alpha (premultiplied)
 
     // write out only values which are needed
-    // For simplicity, emissive is not considered for now.
-    // outColor = GetPackColor(vec4(emissive, 1.0));
+    outColor = vec4(0.0);
     const uint cameraIdx = GetUnpackFlatIndicesCameraIdx(inIndices);
     outVelocityNormal = GetPackVelocityAndNormal(GetFinalCalculatedVelocity(inPos.xyz, inPrevPosI.xyz, cameraIdx), N);
     outBaseColor = GetPackBaseColorWithAo(baseColor.xyz, ao);

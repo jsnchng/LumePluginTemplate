@@ -6,6 +6,14 @@
     "renderNodeGraphName": "",
     "nodes": [
         {
+            "typeName": "RenderNodeMaskUbo",
+            "nodeName": "MASK_UBO_NODE",
+            "custom": {
+                "maskValue": 1,
+                "bufferShareName": "mask_ubo_buffer"
+            }
+        },
+        {
             "typeName": "RenderNodeCreateDefaultCameraGpuImages",
             "nodeName": "RenderNodeCreateDefaultCameraGpuImages",
             "gpuImageDescs": [
@@ -444,6 +452,13 @@
                 }
             },
             "resources": {
+                "buffers": [
+                    {
+                        "set": 2,
+                        "binding": 3,
+                        "name": "mask_ubo_buffer"
+                    }
+                ],
                 "images": [
                     {
                         "set": 2,

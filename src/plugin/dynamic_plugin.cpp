@@ -16,6 +16,7 @@
 #include "render/node/render_node_sr_training.h"
 #include "render/node/render_node_sr_downsample_init.h"
 #include "render/node/render_node_sr_clear_gradient.h"
+#include "render/node/render_node_mask_ubo.h"
 
 PT_BEGIN_NAMESPACE()
 const char* GetVersionInfo() { return "GIT_REVISION: cf4cfcb"; }
@@ -56,10 +57,11 @@ constexpr auto FillRenderNodeTypeInfo()
         {}, {} };
 }
 
-constexpr RENDER_NS::RenderNodeTypeInfo PT_RENDER_NODE_TYPE_INFOS[3] = {
+constexpr RENDER_NS::RenderNodeTypeInfo PT_RENDER_NODE_TYPE_INFOS[4] = {
     FillRenderNodeTypeInfo<RENDER_NS::RenderNodeSRTraining>(),
     FillRenderNodeTypeInfo<RENDER_NS::RenderNodeSRDownsampleInit>(),
     FillRenderNodeTypeInfo<RENDER_NS::RenderNodeSRClearGradient>(),
+    FillRenderNodeTypeInfo<RENDER_NS::RenderNodeMaskUbo>(),
 };
 
 // System type info for CameraControlSystem
