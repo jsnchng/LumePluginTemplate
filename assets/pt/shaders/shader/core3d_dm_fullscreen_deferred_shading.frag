@@ -574,38 +574,136 @@ vec3 BackwardPbrBasicWithLRBaseColor(float depthBufferSample, FullGBufferData fd
     return gradient;
 }
 
-// Helper: evaluate direct lighting for a given normal (for finite-difference gradient)
-vec3 evalDirectLightingForNormal(vec3 N, InputBrdfData brdfData, vec3 worldPos, vec3 V, uint mf) {
-    float NoV = clamp(dot(N, V), CORE3D_PBR_LIGHTING_EPSILON, 1.0);
-    ShadingData sd;
-    sd.pos = worldPos; sd.N = N; sd.NoV = NoV; sd.V = V;
-    sd.f0 = brdfData.f0; sd.alpha2 = brdfData.alpha2; sd.diffuseColor = brdfData.diffuseColor;
-    if ((mf & CORE_MATERIAL_PUNCTUAL_LIGHT_RECEIVER_BIT) == CORE_MATERIAL_PUNCTUAL_LIGHT_RECEIVER_BIT) {
-        return CalculateLighting(sd, mf);
+vec3 EvaluatePbrForBackward(FullGBufferData fd, vec4 baseColor, vec3 N, vec4 material,
+    float ao, vec3 worldPos, vec3 V)
+{
+    InputBrdfData brdfData = CalcBRDFMetallicRoughness(baseColor, material);
+    const float NoV = clamp(dot(N, V), CORE3D_PBR_LIGHTING_EPSILON, 1.0);
+
+    ShadingData shadingData;
+    shadingData.pos = worldPos;
+    shadingData.N = N;
+    shadingData.NoV = NoV;
+    shadingData.V = V;
+    shadingData.f0 = brdfData.f0;
+    shadingData.alpha2 = brdfData.alpha2;
+    shadingData.diffuseColor = brdfData.diffuseColor;
+
+    vec3 color = vec3(0.0);
+    if ((fd.materialFlags & CORE_MATERIAL_PUNCTUAL_LIGHT_RECEIVER_BIT) == CORE_MATERIAL_PUNCTUAL_LIGHT_RECEIVER_BIT) {
+        color = CalculateLighting(shadingData, fd.materialFlags);
     }
-    return vec3(0.0);
+
+    if ((fd.materialFlags & CORE_MATERIAL_INDIRECT_LIGHT_RECEIVER_BIT) == CORE_MATERIAL_INDIRECT_LIGHT_RECEIVER_BIT) {
+        vec3 irradiance = CoreGetIrradianceSample(N) * brdfData.diffuseColor * ao;
+        const vec3 worldReflect = reflect(-V, N);
+        vec3 radiance = CoreGetRadianceSample(worldReflect, brdfData.roughness) *
+            EnvBRDFApprox(brdfData.f0.xyz, brdfData.roughness, NoV);
+        radiance *= ao * SpecularHorizonOcclusion(worldReflect, N);
+        color += irradiance + radiance;
+    }
+
+    return color;
+}
+
+vec3 GetLRBaseColorForBackward(FullGBufferData fd)
+{
+    vec4 GBufferUv = subpassLoad(uGBufferUv);
+    return textureLod(sampler2D(uLRTexture, uLRSamplerRepeat), GBufferUv.xy, 0).rgb;
 }
 
 vec3 BackwardPbrNormal(float depthBufferSample, FullGBufferData fd,
     vec3 predictedRGB, vec3 referenceRGB)
 {
     GetSampledGBuffer(inUv, fd);
-    vec4 GBUv = subpassLoad(uGBufferUv);
-    vec3 lrN = normalize(textureLod(sampler2D(uLRTexture, uLRSamplerRepeat), GBUv.xy, 0).xyz * 2.0 - 1.0);
-    InputBrdfData brdfData = CalcBRDFMetallicRoughness(fd.baseColor, fd.material);
-    uint ci = GetUnpackCameraIndex(uGeneralData);
-    vec3 wp = GetWorldPos(ci, depthBufferSample, inUv.xy);
-    vec3 V = normalize(uCameras[ci].viewInv[3].xyz - wp);
-    const float e = 0.002;
-    const float inv2e = 1.0 / (2.0 * e);
-    vec3 Cpx = evalDirectLightingForNormal(normalize(lrN+vec3(e,0,0)), brdfData, wp, V, fd.materialFlags);
-    vec3 Cmx = evalDirectLightingForNormal(normalize(lrN-vec3(e,0,0)), brdfData, wp, V, fd.materialFlags);
-    vec3 Cpy = evalDirectLightingForNormal(normalize(lrN+vec3(0,e,0)), brdfData, wp, V, fd.materialFlags);
-    vec3 Cmy = evalDirectLightingForNormal(normalize(lrN-vec3(0,e,0)), brdfData, wp, V, fd.materialFlags);
-    vec3 Cpz = evalDirectLightingForNormal(normalize(lrN+vec3(0,0,e)), brdfData, wp, V, fd.materialFlags);
-    vec3 Cmz = evalDirectLightingForNormal(normalize(lrN-vec3(0,0,e)), brdfData, wp, V, fd.materialFlags);
+
+    vec4 baseColor = vec4(GetLRBaseColorForBackward(fd), fd.baseColor.a);
+    const uint cameraIdx = GetUnpackCameraIndex(uGeneralData);
+    const vec3 worldPos = GetWorldPos(cameraIdx, depthBufferSample, inUv.xy);
+    const vec3 V = normalize(uCameras[cameraIdx].viewInv[3].xyz - worldPos);
+
+    const float eps = 0.002;
+    const float inv2e = 1.0 / (2.0 * eps);
+    vec3 N = normalize(fd.normal);
+    vec3 Cpx = EvaluatePbrForBackward(fd, baseColor, normalize(N + vec3(eps, 0.0, 0.0)), fd.material, fd.ao, worldPos, V);
+    vec3 Cmx = EvaluatePbrForBackward(fd, baseColor, normalize(N - vec3(eps, 0.0, 0.0)), fd.material, fd.ao, worldPos, V);
+    vec3 Cpy = EvaluatePbrForBackward(fd, baseColor, normalize(N + vec3(0.0, eps, 0.0)), fd.material, fd.ao, worldPos, V);
+    vec3 Cmy = EvaluatePbrForBackward(fd, baseColor, normalize(N - vec3(0.0, eps, 0.0)), fd.material, fd.ao, worldPos, V);
+    vec3 Cpz = EvaluatePbrForBackward(fd, baseColor, normalize(N + vec3(0.0, 0.0, eps)), fd.material, fd.ao, worldPos, V);
+    vec3 Cmz = EvaluatePbrForBackward(fd, baseColor, normalize(N - vec3(0.0, 0.0, eps)), fd.material, fd.ao, worldPos, V);
+
     vec3 dL_dC = predictedRGB - referenceRGB;
-    return vec3(dot(dL_dC,(Cpx-Cmx)*inv2e), dot(dL_dC,(Cpy-Cmy)*inv2e), dot(dL_dC,(Cpz-Cmz)*inv2e));
+    return vec3(
+        dot(dL_dC, (Cpx - Cmx) * inv2e),
+        dot(dL_dC, (Cpy - Cmy) * inv2e),
+        dot(dL_dC, (Cpz - Cmz) * inv2e));
+}
+
+float BackwardPbrAO(float depthBufferSample, FullGBufferData fd,
+    vec3 predictedRGB, vec3 referenceRGB)
+{
+    GetSampledGBuffer(inUv, fd);
+    if ((fd.materialFlags & CORE_MATERIAL_INDIRECT_LIGHT_RECEIVER_BIT) != CORE_MATERIAL_INDIRECT_LIGHT_RECEIVER_BIT) {
+        return 0.0;
+    }
+
+    vec4 baseColor = vec4(GetLRBaseColorForBackward(fd), fd.baseColor.a);
+    InputBrdfData brdfData = CalcBRDFMetallicRoughness(baseColor, fd.material);
+
+    const uint cameraIdx = GetUnpackCameraIndex(uGeneralData);
+    const vec3 worldPos = GetWorldPos(cameraIdx, depthBufferSample, inUv.xy);
+    const vec3 V = normalize(uCameras[cameraIdx].viewInv[3].xyz - worldPos);
+    const vec3 N = normalize(fd.normal);
+    const float NoV = clamp(dot(N, V), CORE3D_PBR_LIGHTING_EPSILON, 1.0);
+
+    vec3 dColor_dAO = CoreGetIrradianceSample(N) * brdfData.diffuseColor;
+    const vec3 worldReflect = reflect(-V, N);
+    dColor_dAO += CoreGetRadianceSample(worldReflect, brdfData.roughness) *
+        EnvBRDFApprox(brdfData.f0.xyz, brdfData.roughness, NoV) *
+        SpecularHorizonOcclusion(worldReflect, N);
+
+    return dot(predictedRGB - referenceRGB, dColor_dAO);
+}
+
+vec4 BackwardPbrMaterial(float depthBufferSample, FullGBufferData fd,
+    vec3 predictedRGB, vec3 referenceRGB)
+{
+    GetSampledGBuffer(inUv, fd);
+
+    vec4 baseColor = vec4(GetLRBaseColorForBackward(fd), fd.baseColor.a);
+    const uint cameraIdx = GetUnpackCameraIndex(uGeneralData);
+    const vec3 worldPos = GetWorldPos(cameraIdx, depthBufferSample, inUv.xy);
+    const vec3 V = normalize(uCameras[cameraIdx].viewInv[3].xyz - worldPos);
+    const vec3 N = normalize(fd.normal);
+    const vec3 dL_dC = predictedRGB - referenceRGB;
+    const float eps = 0.002;
+
+    vec4 matPlus = fd.material;
+    vec4 matMinus = fd.material;
+
+    matPlus.g = clamp(fd.material.g + eps, CORE_BRDF_MIN_ROUGHNESS, 1.0);
+    matMinus.g = clamp(fd.material.g - eps, CORE_BRDF_MIN_ROUGHNESS, 1.0);
+    vec3 cPlus = EvaluatePbrForBackward(fd, baseColor, N, matPlus, fd.ao, worldPos, V);
+    vec3 cMinus = EvaluatePbrForBackward(fd, baseColor, N, matMinus, fd.ao, worldPos, V);
+    float gradRoughness = dot(dL_dC, (cPlus - cMinus) / max(matPlus.g - matMinus.g, CORE3D_PBR_LIGHTING_EPSILON));
+
+    matPlus = fd.material;
+    matMinus = fd.material;
+    matPlus.b = clamp(fd.material.b + eps, 0.0, 1.0);
+    matMinus.b = clamp(fd.material.b - eps, 0.0, 1.0);
+    cPlus = EvaluatePbrForBackward(fd, baseColor, N, matPlus, fd.ao, worldPos, V);
+    cMinus = EvaluatePbrForBackward(fd, baseColor, N, matMinus, fd.ao, worldPos, V);
+    float gradMetallic = dot(dL_dC, (cPlus - cMinus) / max(matPlus.b - matMinus.b, CORE3D_PBR_LIGHTING_EPSILON));
+
+    matPlus = fd.material;
+    matMinus = fd.material;
+    matPlus.a = clamp(fd.material.a + eps, 0.0, 1.0);
+    matMinus.a = clamp(fd.material.a - eps, 0.0, 1.0);
+    cPlus = EvaluatePbrForBackward(fd, baseColor, N, matPlus, fd.ao, worldPos, V);
+    cMinus = EvaluatePbrForBackward(fd, baseColor, N, matMinus, fd.ao, worldPos, V);
+    float gradSpecularF0 = dot(dL_dC, (cPlus - cMinus) / max(matPlus.a - matMinus.a, CORE3D_PBR_LIGHTING_EPSILON));
+
+    return vec4(0.0, gradRoughness, gradMetallic, gradSpecularF0);
 }
 
 // Compute dLoss/dLREmissive for the current pixel.

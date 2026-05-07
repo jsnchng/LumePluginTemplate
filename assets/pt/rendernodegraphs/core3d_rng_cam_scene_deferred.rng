@@ -488,75 +488,8 @@
                 "index": 0
             },
             "resources": [
-                {
-                    "type": "texture",
-                    "name": "depthBuffer",
-                    "binding": 0,
-                    "usageName": "depth"
-                },
-                {
-                    "type": "texture",
-                    "name": "normalBuffer",
-                    "binding": 1,
-                    "usageName": "velocity_normal"
-                },
-                {
-                    "type": "texture",
-                    "name": "materialBuffer",
-                    "binding": 2,
-                    "usageName": "material"
-                },
-                {
-                    "type": "texture",
-                    "name": "uvBuffer",
-                    "binding": 3,
-                    "usageName": "uv"
-                },
-                {
-                    "type": "texture",
-                    "name": "baseColorBuffer",
-                    "binding": 4,
-                    "usageName": "base_color"
-                },
-                {
-                    "type": "texture",
-                    "name": "lrTexture",
-                    "binding": 5,
-                    "usageName": "lowres_albedo"
-                },
-                {
-                    "type": "sampler",
-                    "name": "sampler",
-                    "binding": 6
-                },
-                {
-                    "type": "texture",
-                    "name": "gtImage",
-                    "binding": 9,
-                    "usageName": "color"
-                }
             ],
             "images": [
-                {
-                    "name": "lrGradient",
-                    "binding": 7,
-                    "usageName": "lr_gradient"
-                },
-                {
-                    "name": "lossOutput",
-                    "binding": 8,
-                    "usageName": "loss_output"
-                },
-                {
-                    "name": "lrMomentum1",
-                    "binding": 10,
-                    "usageName": "lr_momentum1"
-                },
-                {
-                    "name": "lrMomentum2",
-                    "binding": 11,
-                    "usageName": "lr_momentum2"
-                }
             ]
         },
         {
