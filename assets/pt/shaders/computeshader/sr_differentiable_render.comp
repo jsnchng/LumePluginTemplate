@@ -177,7 +177,17 @@ vec3 pbrBackwardSimplified(vec3 dL_dColor, vec3 baseColor, vec3 N, float metalli
 // ================================================================
 // Bilinear sampling and gradient accumulation
 // ================================================================
+vec4 sanitizeGradient(vec4 grad) {
+    if (any(isnan(grad)) || any(isinf(grad))) {
+        return vec4(0.0);
+    }
+    return clamp(grad, vec4(-5.0), vec4(5.0));
+}
+
 void accumulateGradient(vec2 uv, vec4 dL_dBaseColor) {
+    dL_dBaseColor = sanitizeGradient(dL_dBaseColor);
+    if (dot(dL_dBaseColor, dL_dBaseColor) == 0.0) return;
+
     uv = fract(uv); // Since sampler is on repeat mode
 
     vec2 texCoord = uv * vec2(lrWidth, lrHeight) - 0.5;

@@ -75,7 +75,7 @@
                 {
                     "name": "uv",
                     "shareName": "uv",
-                    "format": "r16g16_sfloat",
+                    "format": "r32g32_sfloat",
                     "usageFlags": "color_attachment | input_attachment | sampled | storage",
                     "memoryPropertyFlags": "device_local",
                     "engineCreationFlags": "dynamic_barriers"
@@ -152,7 +152,7 @@
                 {
                     "name": "testColor",
                     "shareName": "testColor",
-                    "format": "b10g11r11_ufloat_pack32",
+                    "format": "r32g32b32a32_sfloat",
                     "dependencyImageName": "depth",
                     "dependencyFlags": "size",
                     "dependencySizeScale": 1,

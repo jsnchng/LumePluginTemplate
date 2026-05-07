@@ -94,6 +94,7 @@ void PbrBasic()
     const uint instanceIdx = GetInstanceIndex();
     // NOTE: by the spec with blend mode opaque alpha should be 1.0 from this calculation
     CORE_RELAXEDP vec4 baseColor = GetBaseColorSample(inUv, instanceIdx) * GetUnpackBaseColor(instanceIdx) * inColor;
+    baseColor = textureLod(uSampTextureBase, inUv.xy, 0) * GetUnpackBaseColor(instanceIdx) * inColor;
     baseColor.a = clamp(baseColor.a, 0.0, 1.0);
     if ((CORE_MATERIAL_FLAGS & CORE_MATERIAL_ADDITIONAL_SHADER_DISCARD_BIT) ==
         CORE_MATERIAL_ADDITIONAL_SHADER_DISCARD_BIT) {
