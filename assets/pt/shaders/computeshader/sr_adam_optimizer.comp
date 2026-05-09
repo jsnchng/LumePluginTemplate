@@ -5,7 +5,7 @@
 // Adam优化器 - 更新纹理参数
 
 // 输入输出图像
-layout(set = 0, binding = 0, rgba8) uniform image2D uTexture;        // 当前纹理值 (RGBA8)
+layout(set = 0, binding = 0, rgba32f) uniform image2D uTexture;        // 当前纹理值 (RGBA8)
 layout(set = 0, binding = 1, rgba32f) uniform image2D uGradient;     // 梯度 (RGBA32F)
 layout(set = 0, binding = 2, rgba32f) uniform image2D uMomentum1;    // 一阶矩 (RGBA32F)
 layout(set = 0, binding = 3, rgba32f) uniform image2D uMomentum2;    // 二阶矩 (RGBA32F)
