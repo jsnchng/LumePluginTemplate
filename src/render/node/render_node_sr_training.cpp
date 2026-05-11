@@ -37,6 +37,11 @@
 using namespace BASE_NS;
 using namespace RENDER_NS;
 
+namespace {
+constexpr const char* SR_CLEAR_GRADIENT_NODE_NAME { "SR_CLEAR_GRADIENT" };
+constexpr const char* LR_GRADIENT_SSBO_NAME { "lr_gradient_ssbo" };
+}
+
 IRenderNode* RenderNodeSRTraining::Create()
 {
     return new RenderNodeSRTraining;
@@ -63,6 +68,9 @@ void RenderNodeSRTraining::InitNode(IRenderNodeContextManager& renderNodeContext
 
 void RenderNodeSRTraining::PreExecuteFrame()
 {
+    IRenderNodeGraphShareManager& rngShareMgr = renderNodeContextMgr_->GetRenderNodeGraphShareManager();
+    lrGradientSsbo_ = rngShareMgr.GetRegisteredRenderNodeOutput(SR_CLEAR_GRADIENT_NODE_NAME, LR_GRADIENT_SSBO_NAME);
+
     // Note: View switch flag handling moved to RenderNodeSRClearGradient
     config_.iteration++;
 }
@@ -154,6 +162,7 @@ void RenderNodeSRTraining::ParseJsonInputs()
     gtImage_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateDefaultCameraGpuImages", "color");
     lrTexture_ = rngShareMgr.GetRegisteredRenderNodeOutput("LOW_RESOLUTION_TEXTURES", "lowres_albedo");
     lrGradient_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_gradient");
+    lrGradientSsbo_ = rngShareMgr.GetRegisteredRenderNodeOutput(SR_CLEAR_GRADIENT_NODE_NAME, LR_GRADIENT_SSBO_NAME);
     lossOutput_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "loss_output");
     lrMomentum1_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_momentum1");
     lrMomentum2_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_momentum2");
@@ -240,7 +249,8 @@ void RenderNodeSRTraining::ExecuteFrame(IRenderCommandList& cmdList)
     // Check resources
     if (!RenderHandleUtil::IsValid(depthBuffer_) || !RenderHandleUtil::IsValid(normalBuffer_) ||
         !RenderHandleUtil::IsValid(materialBuffer_) || !RenderHandleUtil::IsValid(lrTexture_) ||
-        !RenderHandleUtil::IsValid(lrGradient_) || !RenderHandleUtil::IsValid(gtImage_)) {
+        !RenderHandleUtil::IsValid(lrGradient_) || !RenderHandleUtil::IsValid(lrGradientSsbo_) ||
+        !RenderHandleUtil::IsValid(gtImage_)) {
         PLUGIN_LOG_W("RenderNodeSRTraining: Missing resources, skipping frame");
         return;
     }
@@ -337,12 +347,13 @@ void RenderNodeSRTraining::DispatchDifferentiableRender(IRenderCommandList& cmdL
     differentiableRenderBinder_->BindImage(4, baseColorBuffer_);  // binding 4 for downsample init
     differentiableRenderBinder_->BindImage(5, lrTexture_);
     differentiableRenderBinder_->BindSampler(6, sampler_);
-    differentiableRenderBinder_->BindImage(7, lrGradient_);
     differentiableRenderBinder_->BindImage(8, lossOutput_);
     differentiableRenderBinder_->BindImage(9, gtImage_);
     differentiableRenderBinder_->BindImage(10, debugOutput_);
     differentiableRenderBinder_->BindImage(11, predictedBaseColor_);
     differentiableRenderBinder_->BindImage(12, dL_dBaseColor_);
+    differentiableRenderBinder_->BindBuffer(13, lrGradientSsbo_, 0u);
+    
     
     cmdList.UpdateDescriptorSet(differentiableRenderBinder_->GetDescriptorSetHandle(),
                                  differentiableRenderBinder_->GetDescriptorSetLayoutBindingResources());
@@ -464,6 +475,7 @@ void RenderNodeSRTraining::DispatchAdamOptimizer(IRenderCommandList& cmdList)
     adamBinder_->BindImage(1, lrGradient_);
     adamBinder_->BindImage(2, lrMomentum1_);
     adamBinder_->BindImage(3, lrMomentum2_);
+    adamBinder_->BindBuffer(4, lrGradientSsbo_, 0u);
     
     cmdList.UpdateDescriptorSet(adamBinder_->GetDescriptorSetHandle(),
                                  adamBinder_->GetDescriptorSetLayoutBindingResources());

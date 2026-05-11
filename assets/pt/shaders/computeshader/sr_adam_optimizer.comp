@@ -11,6 +11,16 @@ layout(set = 0, binding = 2, rgba32f) uniform image2D uMomentum1;    // 一阶�
 layout(set = 0, binding = 3, rgba32f) uniform image2D uMomentum2;    // 二阶矩 (RGBA32F)
 
 // Push constant参数
+layout(set = 0, binding = 4, std430) buffer LRGradientSsbo {
+    int uLRGradientSsbo[];
+};
+
+const float GRADIENT_ATOMIC_SCALE = 4096.0;
+
+float decodeGradientFromAtomic(int value) {
+    return float(value) / GRADIENT_ATOMIC_SCALE;
+}
+
 layout(push_constant, std430) uniform uPushConstant {
     float learningRate;   // 学习率
     float beta1;          // 一阶矩衰减率
@@ -26,7 +36,17 @@ void main() {
     
     // 读取当前状态
     vec4 value = imageLoad(uTexture, coord);
-    vec4 grad = imageLoad(uGradient, coord);
+    ivec2 textureSizeValue = imageSize(uTexture);
+    if (coord.x >= textureSizeValue.x || coord.y >= textureSizeValue.y) {
+        return;
+    }
+
+    uint gradIdx = (uint(coord.y) * uint(textureSizeValue.x) + uint(coord.x)) * 4u;
+    vec4 grad = vec4(
+        decodeGradientFromAtomic(uLRGradientSsbo[gradIdx + 0u]),
+        decodeGradientFromAtomic(uLRGradientSsbo[gradIdx + 1u]),
+        decodeGradientFromAtomic(uLRGradientSsbo[gradIdx + 2u]),
+        decodeGradientFromAtomic(uLRGradientSsbo[gradIdx + 3u]));
     vec4 m1 = imageLoad(uMomentum1, coord);
     vec4 m2 = imageLoad(uMomentum2, coord);
     
@@ -53,6 +73,7 @@ void main() {
     
     // 写回结果
     imageStore(uTexture, coord, value);
+    imageStore(uGradient, coord, grad);
     imageStore(uMomentum1, coord, m1);
     imageStore(uMomentum2, coord, m2);
     

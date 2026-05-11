@@ -9,6 +9,9 @@ layout(set = 0, binding = 3, rgba32f) uniform image2D uPredictedBaseColor;
 layout(set = 0, binding = 4, rgba32f) uniform image2D uDL_dBaseColor;
 layout(set = 0, binding = 5, rgba32f) uniform image2D uLRMomentum1;
 layout(set = 0, binding = 6, rgba32f) uniform image2D uLRMomentum2;
+layout(set = 0, binding = 7, std430) buffer LRGradientSsbo {
+    int uLRGradientSsbo[];
+};
 
 layout(push_constant) uniform PushConstants {
     uint shouldClearBuffers;  // 1 = clear all buffers, 0 = only clear gradient
@@ -27,6 +30,11 @@ void main() {
     ivec2 gradientSize = imageSize(uLRGradient);
     if (destCoord.x < gradientSize.x && destCoord.y < gradientSize.y) {
         imageStore(uLRGradient, destCoord, vec4(0.0));
+        uint idx = (uint(destCoord.y) * pc.lrWidth + uint(destCoord.x)) * 4u;
+        uLRGradientSsbo[idx + 0u] = 0;
+        uLRGradientSsbo[idx + 1u] = 0;
+        uLRGradientSsbo[idx + 2u] = 0;
+        uLRGradientSsbo[idx + 3u] = 0;
     }
     
     // If view switched, clear all other buffers too

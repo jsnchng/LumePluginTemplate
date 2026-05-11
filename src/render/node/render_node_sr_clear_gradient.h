@@ -49,6 +49,7 @@ private:
 
     // Gradient buffer (cleared every frame)
     RenderHandle lrGradient_;
+    RenderHandleReference lrGradientSsbo_;
     
     // Loss and debug outputs (cleared on view switch)
     RenderHandle lossOutput_;

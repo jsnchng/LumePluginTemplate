@@ -32,6 +32,10 @@
 using namespace BASE_NS;
 using namespace RENDER_NS;
 
+namespace {
+constexpr const char* LR_GRADIENT_SSBO_NAME { "lr_gradient_ssbo" };
+}
+
 IRenderNode* RenderNodeSRClearGradient::Create()
 {
     return new RenderNodeSRClearGradient;
@@ -65,6 +69,11 @@ void RenderNodeSRClearGradient::InitNode(IRenderNodeContextManager& renderNodeCo
     const GpuImageDesc gradientDesc = gpuResourceMgr.GetImageDescriptor(lrGradient_);
     lrWidth_ = gradientDesc.width;
     lrHeight_ = gradientDesc.height;
+
+    const uint32_t gradientSsboByteSize = lrWidth_ * lrHeight_ * 4u * static_cast<uint32_t>(sizeof(float));
+    lrGradientSsbo_ = renderNodeContextMgr.GetGpuResourceManager().Create(LR_GRADIENT_SSBO_NAME,
+        GpuBufferDesc { CORE_BUFFER_USAGE_STORAGE_BUFFER_BIT, CORE_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0u,
+            gradientSsboByteSize });
     
     // Get GT dimensions from loss output
     if (RenderHandleUtil::IsValid(lossOutput_)) {
@@ -98,11 +107,15 @@ void RenderNodeSRClearGradient::InitNode(IRenderNodeContextManager& renderNodeCo
     binder_ = dSetMgr.CreateDescriptorSetBinder(dSetMgr.CreateDescriptorSet(bindings), bindings);
 
     valid_ = true;
+    rngShareMgr.RegisterRenderNodeOutput(LR_GRADIENT_SSBO_NAME, lrGradientSsbo_.GetHandle());
     PLUGIN_LOG_I("RenderNodeSRClearGradient: Initialized");
 }
 
 void RenderNodeSRClearGradient::PreExecuteFrame()
 {
+    IRenderNodeGraphShareManager& rngShareMgr = renderNodeContextMgr_->GetRenderNodeGraphShareManager();
+    rngShareMgr.RegisterRenderNodeOutput(LR_GRADIENT_SSBO_NAME, lrGradientSsbo_.GetHandle());
+
     // Check for view switch flag from RenderDataStorePod
     const auto& renderDataStoreMgr = renderNodeContextMgr_->GetRenderDataStoreManager();
     auto* dataStorePod = static_cast<IRenderDataStorePod*>(
@@ -145,6 +158,7 @@ void RenderNodeSRClearGradient::ExecuteFrame(IRenderCommandList& cmdList)
     binder_->BindImage(4, dL_dBaseColor_);
     binder_->BindImage(5, lrMomentum1_);
     binder_->BindImage(6, lrMomentum2_);
+    binder_->BindBuffer(7, lrGradientSsbo_.GetHandle(), 0u);
 
     cmdList.UpdateDescriptorSet(binder_->GetDescriptorSetHandle(),
                                 binder_->GetDescriptorSetLayoutBindingResources());

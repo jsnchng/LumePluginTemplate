@@ -19,8 +19,7 @@ layout(set = 0, binding = 5) uniform texture2D uLRTexture;
 // Sampler (set 0, binding 6)
 layout(set = 0, binding = 6) uniform sampler uSampler;
 
-// Output images (set 0, binding 7-8)
-layout(set = 0, binding = 7, rgba32f) uniform image2D uLRGradient;
+// Output images
 layout(set = 0, binding = 8, r32f) uniform image2D uLossOutput;
 
 // GT image (set 0, binding 9)
@@ -33,7 +32,12 @@ layout(set = 0, binding = 10, rgba32f) uniform image2D debugOutput;
 layout(set = 0, binding = 11, r11f_g11f_b10f) uniform image2D predictedBaseColor;
 
 // dL_dBaseColor (set 0, binding 12)
-layout(set = 0, binding = 12, r11f_g11f_b10f) uniform image2D dL_dBaseColor_buffer;
+layout(set = 0, binding = 12, rgba32f) uniform image2D dL_dBaseColor_buffer;
+
+// Authoritative LR gradient storage. Values are packed as fixed-point RGBA int per LR texel.
+layout(set = 0, binding = 13, std430) buffer LRGradientSsbo {
+    int uLRGradientSsbo[];
+};
 
 // Push Constants
 layout(push_constant, std430) uniform uPushConstant {
@@ -71,6 +75,14 @@ vec4 sanitizeGradient(vec4 grad) {
     return clamp(grad, vec4(-5.0), vec4(5.0));
 }
 
+const float GRADIENT_ATOMIC_SCALE = 4096.0;
+const float GRADIENT_ATOMIC_LIMIT = 2147480000.0;
+
+int encodeGradientForAtomic(float value) {
+    float scaled = round(value * GRADIENT_ATOMIC_SCALE);
+    return int(clamp(scaled, -GRADIENT_ATOMIC_LIMIT, GRADIENT_ATOMIC_LIMIT));
+}
+
 void accumulateGradient(vec2 uv, vec4 dL_dBaseColor) {
     dL_dBaseColor = sanitizeGradient(dL_dBaseColor);
     if (dot(dL_dBaseColor, dL_dBaseColor) == 0.0) return;
@@ -93,22 +105,42 @@ void accumulateGradient(vec2 uv, vec4 dL_dBaseColor) {
     ivec2 texel01 = clamp(ivec2(texel00.x, texel00.y + 1), ivec2(0), ivec2(lrWidth - 1, lrHeight - 1));
     ivec2 texel11 = clamp(ivec2(texel00.x + 1, texel00.y + 1), ivec2(0), ivec2(lrWidth - 1, lrHeight - 1));
     
-    // Read-modify-write (has race condition, but acceptable for prototype)
-    vec4 g00 = imageLoad(uLRGradient, texel00) + weights.x * dL_dBaseColor;
-    vec4 g10 = imageLoad(uLRGradient, texel10) + weights.y * dL_dBaseColor;
-    vec4 g01 = imageLoad(uLRGradient, texel01) + weights.z * dL_dBaseColor;
-    vec4 g11 = imageLoad(uLRGradient, texel11) + weights.w * dL_dBaseColor;
-    
-    imageStore(uLRGradient, texel00, g00);
-    imageStore(uLRGradient, texel10, g10);
-    imageStore(uLRGradient, texel01, g01);
-    imageStore(uLRGradient, texel11, g11);
+    uint idx00 = (uint(texel00.y) * lrWidth + uint(texel00.x)) * 4u;
+    uint idx10 = (uint(texel10.y) * lrWidth + uint(texel10.x)) * 4u;
+    uint idx01 = (uint(texel01.y) * lrWidth + uint(texel01.x)) * 4u;
+    uint idx11 = (uint(texel11.y) * lrWidth + uint(texel11.x)) * 4u;
+
+    vec4 g00 = weights.x * dL_dBaseColor;
+    vec4 g10 = weights.y * dL_dBaseColor;
+    vec4 g01 = weights.z * dL_dBaseColor;
+    vec4 g11 = weights.w * dL_dBaseColor;
+
+    atomicAdd(uLRGradientSsbo[idx00 + 0u], encodeGradientForAtomic(g00.r));
+    atomicAdd(uLRGradientSsbo[idx00 + 1u], encodeGradientForAtomic(g00.g));
+    atomicAdd(uLRGradientSsbo[idx00 + 2u], encodeGradientForAtomic(g00.b));
+    atomicAdd(uLRGradientSsbo[idx00 + 3u], encodeGradientForAtomic(g00.a));
+
+    atomicAdd(uLRGradientSsbo[idx10 + 0u], encodeGradientForAtomic(g10.r));
+    atomicAdd(uLRGradientSsbo[idx10 + 1u], encodeGradientForAtomic(g10.g));
+    atomicAdd(uLRGradientSsbo[idx10 + 2u], encodeGradientForAtomic(g10.b));
+    atomicAdd(uLRGradientSsbo[idx10 + 3u], encodeGradientForAtomic(g10.a));
+
+    atomicAdd(uLRGradientSsbo[idx01 + 0u], encodeGradientForAtomic(g01.r));
+    atomicAdd(uLRGradientSsbo[idx01 + 1u], encodeGradientForAtomic(g01.g));
+    atomicAdd(uLRGradientSsbo[idx01 + 2u], encodeGradientForAtomic(g01.b));
+    atomicAdd(uLRGradientSsbo[idx01 + 3u], encodeGradientForAtomic(g01.a));
+
+    atomicAdd(uLRGradientSsbo[idx11 + 0u], encodeGradientForAtomic(g11.r));
+    atomicAdd(uLRGradientSsbo[idx11 + 1u], encodeGradientForAtomic(g11.g));
+    atomicAdd(uLRGradientSsbo[idx11 + 2u], encodeGradientForAtomic(g11.b));
+    atomicAdd(uLRGradientSsbo[idx11 + 3u], encodeGradientForAtomic(g11.a));
 }
 
 // ================================================================
 // Main
 // ================================================================
 void main() {
+
     ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
     
     if (pixelCoord.x >= int(gtWidth) || pixelCoord.y >= int(gtHeight)) {
@@ -120,6 +152,8 @@ void main() {
     // Step 1: Read G-Buffer
     float depth = textureLod(sampler2D(uDepthBuffer, uSampler), screenUV, 0.0).r;
     
+
+
     // Skip background pixels
     if (depth >= 1.0) {
         return;
@@ -147,4 +181,6 @@ void main() {
     vec3 testColor = imageLoad(predictedBaseColor, pixelCoord).rgb;
     vec4 debugColor = vec4(testColor, 1.0);
     imageStore(debugOutput, pixelCoord, debugColor);
+
+    
 }

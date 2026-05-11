@@ -38,6 +38,12 @@ layout(set = 2, binding = 3) uniform uMaskUbo {
     uint uMaskFlags;
 };
 
+const uint MASK_BASE_COLOR = 1u << 0u;
+const uint MASK_NORMAL     = 1u << 1u;
+const uint MASK_MATERIAL   = 1u << 2u;
+const uint MASK_EMISSIVE   = 1u << 3u;
+const uint MASK_AO         = 1u << 4u;
+
 // unpack gbuffer
 
 struct FullGBufferData {

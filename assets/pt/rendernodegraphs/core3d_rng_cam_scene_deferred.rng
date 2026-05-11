@@ -14,6 +14,28 @@
             }
         },
         {
+            "typeName": "RenderNodeCreateGpuBuffers",
+            "nodeName": "RenderNodeCreateGpuBuffers",
+            "gpuBufferDescs": [
+                {
+                    "name": "BufferTarget",
+                    "shareName": "MyBufferTarget",
+                    "usageFlags": "transfer_src | transfer_dst | uniform | storage | index | vertex | indirect",
+                    "memoryPropertyFlags": "device_local",
+                    "engineCreationFlags": "dynamic_barriers",
+                    "byteSize": 16777216
+                },
+                {
+                    "name": "BufferTarget2",
+                    "shareName": "MyBufferTarget2",
+                    "usageFlags": "transfer_src | transfer_dst | storage",
+                    "memoryPropertyFlags": "device_local",
+                    "engineCreationFlags": "dynamic_barriers",
+                    "byteSize": 16777216
+                }
+            ]
+        },
+        {
             "typeName": "RenderNodeCreateDefaultCameraGpuImages",
             "nodeName": "RenderNodeCreateDefaultCameraGpuImages",
             "gpuImageDescs": [

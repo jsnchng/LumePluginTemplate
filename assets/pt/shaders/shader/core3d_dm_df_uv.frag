@@ -36,6 +36,43 @@ uint GetInstanceIndex()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Forced LOD 0 sampling functions
+vec4 GetBaseColorSampleLod0(const vec4 uvInput, const uint instanceIdx)
+{
+    const vec2 uv = GetFinalSamplingUV(
+        uvInput, CORE_MATERIAL_TEXCOORD_INFO_BASE_BIT, CORE_MATERIAL_PACK_TEX_BASE_COLOR_UV_IDX, instanceIdx);
+    return textureLod(uSampTextureBase, uv, 0.0);
+}
+
+vec3 GetNormalSampleLod0(const vec4 uvInput, const uint instanceIdx)
+{
+    const vec2 uv = GetFinalSamplingUV(
+        uvInput, CORE_MATERIAL_TEXCOORD_INFO_NORMAL_BIT, CORE_MATERIAL_PACK_TEX_NORMAL_UV_IDX, instanceIdx);
+    return textureLod(uSampTextures[CORE_MATERIAL_TEX_NORMAL_IDX], uv, 0.0).xyz;
+}
+
+vec4 GetMaterialSampleLod0(const vec4 uvInput, const uint instanceIdx)
+{
+    const vec2 uv = GetFinalSamplingUV(
+        uvInput, CORE_MATERIAL_TEXCOORD_INFO_MATERIAL_BIT, CORE_MATERIAL_PACK_TEX_MATERIAL_UV_IDX, instanceIdx);
+    return textureLod(uSampTextures[CORE_MATERIAL_TEX_MATERIAL_IDX], uv, 0.0);
+}
+
+vec3 GetEmissiveSampleLod0(const vec4 uvInput, const uint instanceIdx)
+{
+    const vec2 uv = GetFinalSamplingUV(
+        uvInput, CORE_MATERIAL_TEXCOORD_INFO_EMISSIVE_BIT, CORE_MATERIAL_PACK_TEX_EMISSIVE_UV_IDX, instanceIdx);
+    return textureLod(uSampTextures[CORE_MATERIAL_TEX_EMISSIVE_IDX], uv, 0.0).xyz;
+}
+
+float GetAOSampleLod0(const vec4 uvInput, const uint instanceIdx)
+{
+    const vec2 uv =
+        GetFinalSamplingUV(uvInput, CORE_MATERIAL_TEXCOORD_INFO_AO_BIT, CORE_MATERIAL_PACK_TEX_AO_UV_IDX, instanceIdx);
+    return textureLod(uSampTextures[CORE_MATERIAL_TEX_AO_IDX], uv, 0.0).x;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // "main" functions
 
 void UnlitBasic()
@@ -93,8 +130,7 @@ void PbrBasic()
 {
     const uint instanceIdx = GetInstanceIndex();
     // NOTE: by the spec with blend mode opaque alpha should be 1.0 from this calculation
-    CORE_RELAXEDP vec4 baseColor = GetBaseColorSample(inUv, instanceIdx) * GetUnpackBaseColor(instanceIdx) * inColor;
-    baseColor = textureLod(uSampTextureBase, inUv.xy, 0) * GetUnpackBaseColor(instanceIdx) * inColor;
+    CORE_RELAXEDP vec4 baseColor = GetBaseColorSampleLod0(inUv, instanceIdx) * GetUnpackBaseColor(instanceIdx) * inColor;
     baseColor.a = clamp(baseColor.a, 0.0, 1.0);
     if ((CORE_MATERIAL_FLAGS & CORE_MATERIAL_ADDITIONAL_SHADER_DISCARD_BIT) ==
         CORE_MATERIAL_ADDITIONAL_SHADER_DISCARD_BIT) {
@@ -111,7 +147,7 @@ void PbrBasic()
     vec3 clearcoatN = normNormal;
     // clear coat normal is calculated if normal_map_bit and if clearcoat_bit
     if ((CORE_MATERIAL_FLAGS & CORE_MATERIAL_NORMAL_MAP_BIT) == CORE_MATERIAL_NORMAL_MAP_BIT) {
-        N = GetNormalSample(inUv, instanceIdx);
+        N = GetNormalSampleLod0(inUv, instanceIdx);
         const float normalScale = GetUnpackNormalScale(instanceIdx);
         const mat3 tbn = CalcTbnMatrix(normNormal, inTangentW);
         N = CalcFinalNormal(tbn, N, normalScale);
@@ -124,12 +160,12 @@ void PbrBasic()
     // if no backface culling we flip automatically
     N = gl_FrontFacing ? N : -N;
 
-    CORE_RELAXEDP vec4 material = GetMaterialSample(inUv, instanceIdx) * GetUnpackMaterial(instanceIdx);
+    CORE_RELAXEDP vec4 material = GetMaterialSampleLod0(inUv, instanceIdx) * GetUnpackMaterial(instanceIdx);
     GetFinalCorrectedRoughness(normNormal, material.g);
-    const CORE_RELAXEDP float ao = clamp(GetAOSample(inUv, instanceIdx) * GetUnpackAO(instanceIdx), 0.0, 1.0);
+    const CORE_RELAXEDP float ao = clamp(GetAOSampleLod0(inUv, instanceIdx) * GetUnpackAO(instanceIdx), 0.0, 1.0);
 
     // NOTE: one should write emissive to target and use it additively in lighting
-    CORE_RELAXEDP vec3 emissive = GetEmissiveSample(inUv, instanceIdx) * GetUnpackEmissiveColor(instanceIdx);
+    CORE_RELAXEDP vec3 emissive = GetEmissiveSampleLod0(inUv, instanceIdx) * GetUnpackEmissiveColor(instanceIdx);
     emissive = emissive * baseColor.a; // needs to be multiplied with alpha (premultiplied)
 
     // write out only values which are needed
