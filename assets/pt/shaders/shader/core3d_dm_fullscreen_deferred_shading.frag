@@ -24,12 +24,10 @@ layout(location = 0) in vec2 inUv;
 
 layout(location = 0) out vec4 outColor;
 
-// for differentiable rendering
-// color output: location=1 maps to colorAttachmentIndices[1] in .rng/.json
-layout(location = 1) out vec4 predictedColor;
-layout(location = 2) out vec4 outBaseColorGrad;
 // input attachment: set=1 and binding=4 are defined in .shaderpl, binding=4 maps to inputAttachmentIndices[4] in .rng/.json
 layout(input_attachment_index = 0, set = 1, binding = 4) uniform subpassInput uGBufferUv;
+layout(input_attachment_index = 0, set = 1, binding = 5) uniform subpassInput uGBufferGeomNormal;
+layout(input_attachment_index = 0, set = 1, binding = 6) uniform subpassInput uGBufferTangentW;
 // resources: set=1 and binding=0/1 are both defined in .shaderpl, added via resources in .rng/.json
 layout(set = 2, binding = 0) uniform texture2D uLRTexture;
 layout(set = 2, binding = 1) uniform sampler uLRSamplerRepeat;
@@ -37,6 +35,8 @@ layout(set = 2, binding = 2) uniform texture2D uLRNormal;
 layout(set = 2, binding = 3) uniform uMaskUbo {
     uint uMaskFlags;
 };
+layout(set = 2, binding = 4, r11f_g11f_b10f) uniform image2D uPredictedColorOut;
+layout(set = 2, binding = 5, rgba32f) uniform image2D uGradOut;
 
 const uint MASK_BASE_COLOR = 1u << 0u;
 const uint MASK_NORMAL     = 1u << 1u;
@@ -121,6 +121,33 @@ vec4 GetSampledBaseColor(const vec2 uv)
     GetUnpackBaseColorWithAo(textureLod(uGBufferBaseColor, uv, 0), color.rgb, color.a);
 #endif
     return color;
+}
+
+vec3 GetWorldNormalFromSampledTangentNormal(const vec3 tangentNormal)
+{
+    const vec4 geomNormalScale = subpassLoad(uGBufferGeomNormal);
+    const vec4 tangentW = subpassLoad(uGBufferTangentW);
+    const vec3 geomNormal = normalize(geomNormalScale.xyz);
+    const mat3 tbn = CalcTbnMatrix(geomNormal, tangentW);
+    return CalcFinalNormal(tbn, tangentNormal, geomNormalScale.w);
+}
+
+bool HasGBufferNormalMap()
+{
+    return subpassLoad(uGBufferGeomNormal).w >= 0.0;
+}
+
+vec3 GetLRNormalSample()
+{
+    const vec4 gBufferUv = subpassLoad(uGBufferUv);
+    return textureLod(sampler2D(uLRNormal, uLRSamplerRepeat), gBufferUv.xy, 0).xyz;
+}
+
+void ApplyLRNormal(inout FullGBufferData fd, const vec3 lrNormal)
+{
+    if (HasGBufferNormalMap()) {
+        fd.normal = GetWorldNormalFromSampledTangentNormal(lrNormal);
+    }
 }
 
 // end gbuffer
@@ -328,7 +355,6 @@ vec4 PbrBasicWithLRBaseColor(float depthBufferSample, FullGBufferData fd)
     // Sample base color from low resolution texture using uv stored in G-Buffer, replacing base color from G-Buffer
     vec4 GBufferUv = subpassLoad(uGBufferUv);
     CORE_RELAXEDP vec4 LRBaseColor = textureLod(sampler2D(uLRTexture, uLRSamplerRepeat), GBufferUv.xy, 0);
-    CORE_RELAXEDP vec4 LRNormal = textureLod(sampler2D(uLRNormal, uLRSamplerRepeat), GBufferUv.xy, 0);
     vec4 baseColor = vec4(LRBaseColor.rgb, fd.baseColor.a);  // channel a is from AO not albedo
     // should always be metallic roughness
     InputBrdfData brdfData = CalcBRDFMetallicRoughness(baseColor, fd.material);
@@ -378,6 +404,55 @@ vec4 PbrBasicWithLRBaseColor(float depthBufferSample, FullGBufferData fd)
     InplaceFogBlock(CORE_CAMERA_FLAGS, worldPos.xyz, camWorldPos.xyz, vec4(color, 1.0), color);
 
     color.rgb = clamp(color.rgb, 0.0, CORE_HDR_FLOAT_CLAMP_MAX_VALUE); // zero to hdr max
+    return vec4(color.rgb, 1.0);
+}
+
+vec4 PbrBasicWithLRNormal(float depthBufferSample, FullGBufferData fd)
+{
+    GetSampledGBuffer(inUv, fd);
+    ApplyLRNormal(fd, GetLRNormalSample());
+
+    // Keep base color and material from the G-Buffer; only replace normal with the LR normal path.
+    vec4 baseColor = fd.baseColor;
+    InputBrdfData brdfData = CalcBRDFMetallicRoughness(baseColor, fd.material);
+
+    const uint cameraIdx = GetUnpackCameraIndex(uGeneralData);
+    const vec3 worldPos = GetWorldPos(cameraIdx, depthBufferSample, inUv.xy);
+    const vec3 camWorldPos = uCameras[cameraIdx].viewInv[3].xyz;
+
+    const vec3 V = normalize(camWorldPos - worldPos);
+    const float NoV = clamp(dot(fd.normal, V), CORE3D_PBR_LIGHTING_EPSILON, 1.0);
+
+    ShadingData shadingData;
+    shadingData.pos = worldPos;
+    shadingData.N = fd.normal;
+    shadingData.NoV = NoV;
+    shadingData.V = V;
+    shadingData.f0 = brdfData.f0;
+    shadingData.alpha2 = brdfData.alpha2;
+    shadingData.diffuseColor = brdfData.diffuseColor;
+    CORE_RELAXEDP const float roughness = brdfData.roughness;
+
+    vec3 color = vec3(0.0);
+    if ((fd.materialFlags & CORE_MATERIAL_PUNCTUAL_LIGHT_RECEIVER_BIT) == CORE_MATERIAL_PUNCTUAL_LIGHT_RECEIVER_BIT) {
+        color = CalculateLighting(shadingData, fd.materialFlags);
+    }
+
+    if ((fd.materialFlags & CORE_MATERIAL_INDIRECT_LIGHT_RECEIVER_BIT) == CORE_MATERIAL_INDIRECT_LIGHT_RECEIVER_BIT) {
+        CORE_RELAXEDP vec3 irradiance = CoreGetIrradianceSample(shadingData.N) * shadingData.diffuseColor * fd.ao;
+
+        const vec3 worldReflect = reflect(-shadingData.V, shadingData.N);
+        const CORE_RELAXEDP vec3 fIndirect = EnvBRDFApprox(shadingData.f0.xyz, roughness, NoV);
+        CORE_RELAXEDP vec3 radianceSample = CoreGetRadianceSample(worldReflect, roughness);
+        CORE_RELAXEDP vec3 radiance = radianceSample * fIndirect;
+        radiance *= fd.ao * SpecularHorizonOcclusion(worldReflect, fd.normal);
+
+        color += (irradiance + radiance);
+    }
+
+    InplaceFogBlock(CORE_CAMERA_FLAGS, worldPos.xyz, camWorldPos.xyz, vec4(color, 1.0), color);
+
+    color.rgb = clamp(color.rgb, 0.0, CORE_HDR_FLOAT_CLAMP_MAX_VALUE);
     return vec4(color.rgb, 1.0);
 }
 
@@ -616,6 +691,59 @@ vec3 GetLRBaseColorForBackward(FullGBufferData fd)
 {
     vec4 GBufferUv = subpassLoad(uGBufferUv);
     return textureLod(sampler2D(uLRTexture, uLRSamplerRepeat), GBufferUv.xy, 0).rgb;
+}
+
+vec3 BackwardPbrBasicWithLRNormal(float depthBufferSample, FullGBufferData fd,
+    vec3 predictedRGB, vec3 referenceRGB)
+{
+    GetSampledGBuffer(inUv, fd);
+    if (!HasGBufferNormalMap()) {
+        return vec3(0.0);
+    }
+
+    const vec4 baseColor = fd.baseColor;
+    const vec3 LRNormal = GetLRNormalSample();
+
+    const uint cameraIdx = GetUnpackCameraIndex(uGeneralData);
+    const vec3 worldPos = GetWorldPos(cameraIdx, depthBufferSample, inUv.xy);
+    const vec3 V = normalize(uCameras[cameraIdx].viewInv[3].xyz - worldPos);
+
+    const float eps = 0.002;
+    const vec3 dL_dC = predictedRGB - referenceRGB;
+    vec3 grad = vec3(0.0);
+
+    vec3 normalPlus = LRNormal;
+    vec3 normalMinus = LRNormal;
+
+    normalPlus.x = clamp(LRNormal.x + eps, 0.0, 1.0);
+    normalMinus.x = clamp(LRNormal.x - eps, 0.0, 1.0);
+    vec3 colorPlus = EvaluatePbrForBackward(
+        fd, baseColor, GetWorldNormalFromSampledTangentNormal(normalPlus), fd.material, fd.ao, worldPos, V);
+    vec3 colorMinus = EvaluatePbrForBackward(
+        fd, baseColor, GetWorldNormalFromSampledTangentNormal(normalMinus), fd.material, fd.ao, worldPos, V);
+    grad.x = dot(dL_dC, (colorPlus - colorMinus) / max(normalPlus.x - normalMinus.x, CORE3D_PBR_LIGHTING_EPSILON));
+
+    normalPlus = LRNormal;
+    normalMinus = LRNormal;
+    normalPlus.y = clamp(LRNormal.y + eps, 0.0, 1.0);
+    normalMinus.y = clamp(LRNormal.y - eps, 0.0, 1.0);
+    colorPlus = EvaluatePbrForBackward(
+        fd, baseColor, GetWorldNormalFromSampledTangentNormal(normalPlus), fd.material, fd.ao, worldPos, V);
+    colorMinus = EvaluatePbrForBackward(
+        fd, baseColor, GetWorldNormalFromSampledTangentNormal(normalMinus), fd.material, fd.ao, worldPos, V);
+    grad.y = dot(dL_dC, (colorPlus - colorMinus) / max(normalPlus.y - normalMinus.y, CORE3D_PBR_LIGHTING_EPSILON));
+
+    normalPlus = LRNormal;
+    normalMinus = LRNormal;
+    normalPlus.z = clamp(LRNormal.z + eps, 0.0, 1.0);
+    normalMinus.z = clamp(LRNormal.z - eps, 0.0, 1.0);
+    colorPlus = EvaluatePbrForBackward(
+        fd, baseColor, GetWorldNormalFromSampledTangentNormal(normalPlus), fd.material, fd.ao, worldPos, V);
+    colorMinus = EvaluatePbrForBackward(
+        fd, baseColor, GetWorldNormalFromSampledTangentNormal(normalMinus), fd.material, fd.ao, worldPos, V);
+    grad.z = dot(dL_dC, (colorPlus - colorMinus) / max(normalPlus.z - normalMinus.z, CORE3D_PBR_LIGHTING_EPSILON));
+
+    return grad;
 }
 
 vec3 BackwardPbrNormal(float depthBufferSample, FullGBufferData fd,
@@ -885,7 +1013,10 @@ fragment shader for basic pbr materials.
 */
 void main(void)
 {
+    const ivec2 pixelCoord = ivec2(gl_FragCoord.xy);
     const float depthBufferSample = GetSampledDepthBuffer(inUv);
+    vec4 predictedColor = vec4(0.0);
+    vec4 outBaseColorGrad = vec4(0.0);
     if (depthBufferSample < 1.0) {
         FullGBufferData fd = GetUnpackMaterialValues(inUv);
         if (fd.materialType == CORE_MATERIAL_UNLIT) {
@@ -894,16 +1025,23 @@ void main(void)
             outColor = UnlitShadowAlpha(depthBufferSample, fd);
         } else {
             outColor = PbrBasic(depthBufferSample, fd);
-            predictedColor = PbrBasicWithLRBaseColor(depthBufferSample, fd);
+            if ((uMaskFlags & MASK_NORMAL) == MASK_NORMAL) {
+                predictedColor = PbrBasicWithLRNormal(depthBufferSample, fd);
+            } else {
+                predictedColor = PbrBasicWithLRBaseColor(depthBufferSample, fd);
+            }
 
-            // Backward pass: compute gradient of Loss w.r.t. LRBaseColor
-            vec3 grad = BackwardPbrBasicWithLRBaseColor(
-                depthBufferSample, fd, predictedColor.rgb, outColor.rgb);
+            vec3 grad = vec3(0.0);
+            if ((uMaskFlags & MASK_NORMAL) == MASK_NORMAL) {
+                grad = BackwardPbrBasicWithLRNormal(depthBufferSample, fd, predictedColor.rgb, outColor.rgb);
+            } else {
+                grad = BackwardPbrBasicWithLRBaseColor(depthBufferSample, fd, predictedColor.rgb, outColor.rgb);
+            }
             outBaseColorGrad = vec4(grad, 1.0);
         }
     } else {
         outColor = vec4(0.0);
-        predictedColor = vec4(0.0);
-        outBaseColorGrad = vec4(0.0);
     }
+    imageStore(uPredictedColorOut, pixelCoord, predictedColor);
+    imageStore(uGradOut, pixelCoord, outBaseColorGrad);
 }

@@ -25,6 +25,8 @@ layout(location = 1) out vec4 outVelocityNormal;
 layout(location = 2) out vec4 outBaseColor;
 layout(location = 3) out vec4 outMaterial;
 layout(location = 4) out vec4 outUv;
+layout(location = 5) out vec4 outGeomNormal;
+layout(location = 6) out vec4 outTangentW;
 
 uint GetInstanceIndex()
 {
@@ -98,6 +100,9 @@ void UnlitBasic()
 
     const vec4 material = vec4(0.0);
     outMaterial = GetPackMaterialWithFlags(material, CORE_MATERIAL_TYPE, CORE_MATERIAL_FLAGS);
+    outUv = vec4(inUv.xy, 0.0, 1.0);
+    outGeomNormal = vec4(normalize(inNormal.xyz), -1.0);
+    outTangentW = inTangentW;
 }
 
 void UnlitShadowAlpha()
@@ -124,6 +129,9 @@ void UnlitShadowAlpha()
 
     const vec4 material = vec4(0.0);
     outMaterial = GetPackMaterialWithFlags(material, CORE_MATERIAL_TYPE, CORE_MATERIAL_FLAGS);
+    outUv = vec4(inUv.xy, 0.0, 1.0);
+    outGeomNormal = vec4(normalize(inNormal.xyz), -1.0);
+    outTangentW = inTangentW;
 }
 
 void PbrBasic()
@@ -143,12 +151,12 @@ void PbrBasic()
     }
 
     const vec3 normNormal = normalize(inNormal.xyz);
+    const float normalScale = GetUnpackNormalScale(instanceIdx);
     vec3 N = normNormal;
     vec3 clearcoatN = normNormal;
     // clear coat normal is calculated if normal_map_bit and if clearcoat_bit
     if ((CORE_MATERIAL_FLAGS & CORE_MATERIAL_NORMAL_MAP_BIT) == CORE_MATERIAL_NORMAL_MAP_BIT) {
         N = GetNormalSampleLod0(inUv, instanceIdx);
-        const float normalScale = GetUnpackNormalScale(instanceIdx);
         const mat3 tbn = CalcTbnMatrix(normNormal, inTangentW);
         N = CalcFinalNormal(tbn, N, normalScale);
         if ((CORE_MATERIAL_FLAGS & CORE_MATERIAL_CLEARCOAT_BIT) == CORE_MATERIAL_CLEARCOAT_BIT) {
@@ -171,10 +179,15 @@ void PbrBasic()
     // write out only values which are needed
     outColor = vec4(0.0);
     const uint cameraIdx = GetUnpackFlatIndicesCameraIdx(inIndices);
+    const vec2 normalUv = GetFinalSamplingUV(
+        inUv, CORE_MATERIAL_TEXCOORD_INFO_NORMAL_BIT, CORE_MATERIAL_PACK_TEX_NORMAL_UV_IDX, instanceIdx);
     outVelocityNormal = GetPackVelocityAndNormal(GetFinalCalculatedVelocity(inPos.xyz, inPrevPosI.xyz, cameraIdx), N);
     outBaseColor = GetPackBaseColorWithAo(baseColor.xyz, ao);
     outMaterial = GetPackMaterialWithFlags(material, CORE_MATERIAL_TYPE, CORE_MATERIAL_FLAGS);
-    outUv = vec4(inUv.xy, 0.0, 1.0);
+    outUv = vec4(normalUv, 0.0, 1.0);
+    outGeomNormal = vec4(normNormal,
+        ((CORE_MATERIAL_FLAGS & CORE_MATERIAL_NORMAL_MAP_BIT) == CORE_MATERIAL_NORMAL_MAP_BIT) ? normalScale : -1.0);
+    outTangentW = inTangentW;
 }
 
 /*

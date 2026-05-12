@@ -9,7 +9,7 @@
             "typeName": "RenderNodeMaskUbo",
             "nodeName": "MASK_UBO_NODE",
             "custom": {
-                "maskValue": 1,
+                "maskValue": 2,
                 "bufferShareName": "mask_ubo_buffer"
             }
         },
@@ -100,6 +100,22 @@
                     "format": "r32g32_sfloat",
                     "usageFlags": "color_attachment | input_attachment | sampled | storage",
                     "memoryPropertyFlags": "device_local",
+                    "engineCreationFlags": "dynamic_barriers"
+                },
+                {
+                    "name": "geom_normal",
+                    "shareName": "geom_normal",
+                    "format": "r16g16b16a16_sfloat",
+                    "usageFlags": "color_attachment | input_attachment | sampled",
+                    "memoryPropertyFlags": "device_local | lazily_allocated",
+                    "engineCreationFlags": "dynamic_barriers"
+                },
+                {
+                    "name": "tangent_w",
+                    "shareName": "tangent_w",
+                    "format": "r16g16b16a16_sfloat",
+                    "usageFlags": "color_attachment | input_attachment | sampled",
+                    "memoryPropertyFlags": "device_local | lazily_allocated",
                     "engineCreationFlags": "dynamic_barriers"
                 }
             ]
@@ -201,7 +217,7 @@
                 {
                     "name": "lowres_normal",
                     "shareName": "lowres_normal",
-                    "format": "r8g8b8a8_unorm",
+                    "format": "r32g32b32a32_sfloat",
                     "width": 1024,
                     "height": 1024,
                     "usageFlags": "sampled | storage",
@@ -371,12 +387,10 @@
                             0.0,
                             0.0,
                             0.0,
-                            0.0
+                            1.0
                         ],
                         "storeOp": "store",
-                        "name": "predicted_base_color",
-                        "resourceLocation": "from_named_render_node_output",
-                        "nodeName": "RenderNodeCreateGpuImages"
+                        "name": "geom_normal"
                     },
                     {
                         "loadOp": "clear",
@@ -384,12 +398,10 @@
                             0.0,
                             0.0,
                             0.0,
-                            0.0
+                            1.0
                         ],
                         "storeOp": "store",
-                        "name": "testColor",
-                        "resourceLocation": "from_named_render_node_output",
-                        "nodeName": "RenderNodeCreateGpuImages"
+                        "name": "tangent_w"
                     }
                 ],
                 "subpassIndex": 0,
@@ -401,7 +413,9 @@
                         2,
                         3,
                         4,
-                        5
+                        5,
+                        6,
+                        7
                     ]
                 }
             }
@@ -448,11 +462,11 @@
                         "storeOp": "store"
                     },
                     {
-                        "name": "predicted_base_color",
+                        "name": "geom_normal",
                         "storeOp": "store"
                     },
                     {
-                        "name": "testColor",
+                        "name": "tangent_w",
                         "storeOp": "store"
                     }
                 ],
@@ -460,16 +474,16 @@
                 "subpassCount": 2,
                 "subpass": {
                     "colorAttachmentIndices": [
-                        1,
-                        6,
-                        7
+                        1
                     ],
                     "inputAttachmentIndices": [
                         0,
                         2,
                         3,
                         4,
-                        5
+                        5,
+                        6,
+                        7
                     ]
                 }
             },
@@ -491,6 +505,16 @@
                         "set": 2,
                         "binding": 2,
                         "name": "lowres_normal"
+                    },
+                    {
+                        "set": 2,
+                        "binding": 4,
+                        "name": "predicted_base_color"
+                    },
+                    {
+                        "set": 2,
+                        "binding": 5,
+                        "name": "testColor"
                     }
                 ],
                 "samplers": [
@@ -554,7 +578,7 @@
                     {
                         "set": 0,
                         "binding": 3,
-                        "name": "lowres_albedo"
+                        "name": "lowres_normal"
                     },
                     {
                         "set": 0,

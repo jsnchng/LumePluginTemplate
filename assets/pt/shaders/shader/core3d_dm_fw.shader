@@ -150,6 +150,9 @@
                         },
                         {
                             "colorWriteMask": "r_bit|g_bit|b_bit|a_bit"
+                        },
+                        {
+                            "colorWriteMask": "r_bit|g_bit|b_bit|a_bit"
                         }
                     ]
                 }

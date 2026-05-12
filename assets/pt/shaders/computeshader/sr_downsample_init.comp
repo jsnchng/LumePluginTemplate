@@ -6,7 +6,7 @@ layout(set = 0, binding = 0) uniform sampler defaultSampler;
 layout(set = 0, binding = 1) uniform texture2D rawAlbedo;
 layout(set = 0, binding = 2, rgba8) uniform image2D lrAlbedo;
 layout(set = 0, binding = 3) uniform texture2D rawNormal;
-layout(set = 0, binding = 4, rgba8) uniform image2D lrNormal;
+layout(set = 0, binding = 4, rgba32f) uniform image2D lrNormal;
 layout(set = 0, binding = 5) uniform texture2D rawMaterial;
 layout(set = 0, binding = 6, rgba8) uniform image2D lrMaterial;
 layout(set = 0, binding = 7) uniform texture2D rawEmissive;

@@ -160,7 +160,7 @@ void RenderNodeSRTraining::ParseJsonInputs()
     uvBuffer_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateDefaultCameraGpuImages", "uv");
     baseColorBuffer_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateDefaultCameraGpuImages", "base_color");
     gtImage_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateDefaultCameraGpuImages", "color");
-    lrTexture_ = rngShareMgr.GetRegisteredRenderNodeOutput("LOW_RESOLUTION_TEXTURES", "lowres_albedo");
+    lrTexture_ = rngShareMgr.GetRegisteredRenderNodeOutput("LOW_RESOLUTION_TEXTURES", "lowres_normal");
     lrGradient_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_gradient");
     lrGradientSsbo_ = rngShareMgr.GetRegisteredRenderNodeOutput(SR_CLEAR_GRADIENT_NODE_NAME, LR_GRADIENT_SSBO_NAME);
     lossOutput_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "loss_output");
