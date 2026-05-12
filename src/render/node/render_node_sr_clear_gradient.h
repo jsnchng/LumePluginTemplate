@@ -51,11 +51,11 @@ private:
     RenderHandle lrGradient_;
     RenderHandleReference lrGradientSsbo_;
     
-    // Loss and debug outputs (cleared on view switch)
+    // Loss and training outputs (cleared on view switch)
     RenderHandle lossOutput_;
-    RenderHandle debugOutput_;
+    RenderHandle predictedColorOutput_;
     RenderHandle predictedBaseColor_;
-    RenderHandle dL_dBaseColor_;
+    RenderHandle dLossDSampledTexture_;
     
     // Adam optimizer momentum buffers (cleared on view switch)
     RenderHandle lrMomentum1_;

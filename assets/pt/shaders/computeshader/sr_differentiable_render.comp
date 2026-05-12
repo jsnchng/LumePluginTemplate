@@ -6,9 +6,9 @@ layout(set = 0, binding = 0) uniform texture2D uDepthBuffer;
 layout(set = 0, binding = 1, rgba32f) readonly uniform image2D uLRGradient;
 layout(set = 0, binding = 3) uniform texture2D uUVBuffer;
 layout(set = 0, binding = 6) uniform sampler uSampler;
-layout(set = 0, binding = 10, rgba32f) uniform image2D debugOutput;
+layout(set = 0, binding = 10, rgba32f) uniform image2D predictedColorOutput;
 layout(set = 0, binding = 11, r11f_g11f_b10f) uniform image2D predictedBaseColor;
-layout(set = 0, binding = 12, rgba32f) uniform image2D dLoss_dSampledTextureBuffer;
+layout(set = 0, binding = 12, rgba32f) uniform image2D dLossDSampledTextureBuffer;
 layout(set = 0, binding = 13, std430) buffer LRGradientSsbo {
     int uLRGradientSsbo[];
 };
@@ -102,8 +102,8 @@ void main()
 
     ivec2 lrSize = imageSize(uLRGradient);
     vec2 texUv = textureLod(sampler2D(uUVBuffer, uSampler), screenUv, 0.0).xy;
-    vec4 dLossDSampledTexture = imageLoad(dLoss_dSampledTextureBuffer, pixelCoord);
+    vec4 dLossDSampledTexture = imageLoad(dLossDSampledTextureBuffer, pixelCoord);
     accumulateGradient(texUv, dLossDSampledTexture, lrSize);
 
-    imageStore(debugOutput, pixelCoord, vec4(imageLoad(predictedBaseColor, pixelCoord).rgb, 1.0));
+    imageStore(predictedColorOutput, pixelCoord, vec4(imageLoad(predictedBaseColor, pixelCoord).rgb, 1.0));
 }

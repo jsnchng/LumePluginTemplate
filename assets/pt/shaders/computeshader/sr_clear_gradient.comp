@@ -4,9 +4,9 @@
 
 layout(set = 0, binding = 0, rgba32f) uniform image2D uLRGradient;
 layout(set = 0, binding = 1, rgba32f) uniform image2D uLossOutput;
-layout(set = 0, binding = 2, rgba32f) uniform image2D uDebugOutput;
+layout(set = 0, binding = 2, rgba32f) uniform image2D uPredictedColorOutput;
 layout(set = 0, binding = 3, rgba32f) uniform image2D uPredictedBaseColor;
-layout(set = 0, binding = 4, rgba32f) uniform image2D uDL_dBaseColor;
+layout(set = 0, binding = 4, rgba32f) uniform image2D uDLossDSampledTexture;
 layout(set = 0, binding = 5, rgba32f) uniform image2D uLRMomentum1;
 layout(set = 0, binding = 6, rgba32f) uniform image2D uLRMomentum2;
 layout(set = 0, binding = 7, std430) buffer LRGradientSsbo {
@@ -40,9 +40,9 @@ void main() {
         // Clear loss output (GT size)
         if (destCoord.x < pc.gtWidth && destCoord.y < pc.gtHeight) {
             imageStore(uLossOutput, destCoord, vec4(0.0));
-            imageStore(uDebugOutput, destCoord, vec4(0.0));
+            imageStore(uPredictedColorOutput, destCoord, vec4(0.0));
             imageStore(uPredictedBaseColor, destCoord, vec4(0.0));
-            imageStore(uDL_dBaseColor, destCoord, vec4(0.0));
+            imageStore(uDLossDSampledTexture, destCoord, vec4(0.0));
         }
         
         // Clear momentum buffers (LR size)

@@ -166,8 +166,8 @@
                     "engineCreationFlags": "dynamic_barriers"
                 },
                 {
-                    "name": "debugOutput",
-                    "shareName": "debugOutput",
+                    "name": "predicted_color_output",
+                    "shareName": "predicted_color_output",
                     "format": "r32g32b32a32_sfloat",
                     "dependencyImageName": "depth",
                     "dependencyFlags": "size",
@@ -188,8 +188,8 @@
                     "engineCreationFlags": "dynamic_barriers"
                 },
                 {
-                    "name": "testColor",
-                    "shareName": "testColor",
+                    "name": "dloss_dsampled_texture",
+                    "shareName": "dloss_dsampled_texture",
                     "format": "r32g32b32a32_sfloat",
                     "dependencyImageName": "depth",
                     "dependencyFlags": "size",
@@ -466,7 +466,7 @@
                     {
                         "set": 2,
                         "binding": 5,
-                        "name": "testColor"
+                        "name": "dloss_dsampled_texture"
                     }
                 ],
                 "samplers": [
@@ -520,7 +520,7 @@
                     {
                         "set": 0,
                         "binding": 1,
-                        "name": "debugOutput"
+                        "name": "predicted_color_output"
                     },
                     {
                         "set": 0,

@@ -34,7 +34,7 @@ layout(set = 2, binding = 3) uniform uMaskUbo {
     uint uMaskFlags;
 };
 layout(set = 2, binding = 4, r11f_g11f_b10f) uniform image2D uPredictedColorOut;
-layout(set = 2, binding = 5, rgba32f) uniform image2D uGradOut;
+layout(set = 2, binding = 5, rgba32f) uniform image2D uDLossDSampledTextureOut;
 
 const uint MASK_BASE_COLOR = 1u << 0u;
 const uint MASK_NORMAL     = 1u << 1u;
@@ -963,5 +963,5 @@ void main(void)
         outColor = vec4(0.0);
     }
     imageStore(uPredictedColorOut, pixelCoord, predictedColor);
-    imageStore(uGradOut, pixelCoord, outBaseColorGrad);
+    imageStore(uDLossDSampledTextureOut, pixelCoord, outBaseColorGrad);
 }

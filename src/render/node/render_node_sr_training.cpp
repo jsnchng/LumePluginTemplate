@@ -79,9 +79,9 @@ void RenderNodeSRTraining::ResolveResources()
     lrGradientSsbo_ = rngShareMgr.GetRegisteredRenderNodeOutput(SR_CLEAR_GRADIENT_NODE_NAME, LR_GRADIENT_SSBO_NAME);
     lrMomentum1_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_momentum1");
     lrMomentum2_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_momentum2");
-    debugOutput_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "debugOutput");
+    predictedColorOutput_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "predicted_color_output");
     predictedBaseColor_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "predicted_base_color");
-    dL_dBaseColor_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "testColor");
+    dLossDSampledTexture_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "dloss_dsampled_texture");
     const auto& gpuResourceMgr = renderNodeContextMgr_->GetGpuResourceManager();
     sampler_ = gpuResourceMgr.GetSamplerHandle("CORE_DEFAULT_SAMPLER_LINEAR_MIPMAP_REPEAT"); // default sampler
 }
@@ -160,8 +160,8 @@ void RenderNodeSRTraining::ExecuteFrame(IRenderCommandList& cmdList)
     if (!RenderHandleUtil::IsValid(depthBuffer_) || !RenderHandleUtil::IsValid(uvBuffer_) ||
         !RenderHandleUtil::IsValid(lrTexture_) || !RenderHandleUtil::IsValid(lrGradient_) ||
         !RenderHandleUtil::IsValid(lrGradientSsbo_) || !RenderHandleUtil::IsValid(lrMomentum1_) ||
-        !RenderHandleUtil::IsValid(lrMomentum2_) || !RenderHandleUtil::IsValid(debugOutput_) ||
-        !RenderHandleUtil::IsValid(predictedBaseColor_) || !RenderHandleUtil::IsValid(dL_dBaseColor_) ||
+        !RenderHandleUtil::IsValid(lrMomentum2_) || !RenderHandleUtil::IsValid(predictedColorOutput_) ||
+        !RenderHandleUtil::IsValid(predictedBaseColor_) || !RenderHandleUtil::IsValid(dLossDSampledTexture_) ||
         !RenderHandleUtil::IsValid(sampler_)) {
         PLUGIN_LOG_W("RenderNodeSRTraining: Missing resources, skipping frame");
         return;
@@ -186,9 +186,9 @@ void RenderNodeSRTraining::DispatchDifferentiableRender(IRenderCommandList& cmdL
     differentiableRenderBinder_->BindImage(1, lrGradient_);
     differentiableRenderBinder_->BindImage(3, uvBuffer_);
     differentiableRenderBinder_->BindSampler(6, sampler_);
-    differentiableRenderBinder_->BindImage(10, debugOutput_);
+    differentiableRenderBinder_->BindImage(10, predictedColorOutput_);
     differentiableRenderBinder_->BindImage(11, predictedBaseColor_);
-    differentiableRenderBinder_->BindImage(12, dL_dBaseColor_);
+    differentiableRenderBinder_->BindImage(12, dLossDSampledTexture_);
     differentiableRenderBinder_->BindBuffer(13, lrGradientSsbo_, 0u);
     cmdList.UpdateDescriptorSet(differentiableRenderBinder_->GetDescriptorSetHandle(),
                                  differentiableRenderBinder_->GetDescriptorSetLayoutBindingResources());

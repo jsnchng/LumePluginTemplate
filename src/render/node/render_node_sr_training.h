@@ -86,14 +86,14 @@ private:
     RenderHandle lrMomentum1_;
     RenderHandle lrMomentum2_;
 
-    // Debug Output
-    RenderHandle debugOutput_;
+    // Predicted color output
+    RenderHandle predictedColorOutput_;
 
     // Predicted Base Color
     RenderHandle predictedBaseColor_;
 
     // dLoss/dSampledTexture from deferred shading
-    RenderHandle dL_dBaseColor_;
+    RenderHandle dLossDSampledTexture_;
 
     // Pipeline handles
     struct PSOs {

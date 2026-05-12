@@ -54,9 +54,9 @@ void RenderNodeSRClearGradient::InitNode(IRenderNodeContextManager& renderNodeCo
     IRenderNodeGraphShareManager& rngShareMgr = renderNodeContextMgr.GetRenderNodeGraphShareManager();
     lrGradient_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_gradient");
     lossOutput_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "loss_output");
-    debugOutput_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "debugOutput");
+    predictedColorOutput_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "predicted_color_output");
     predictedBaseColor_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "predicted_base_color");
-    dL_dBaseColor_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "testColor");
+    dLossDSampledTexture_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "dloss_dsampled_texture");
     lrMomentum1_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_momentum1");
     lrMomentum2_ = rngShareMgr.GetRegisteredRenderNodeOutput("RenderNodeCreateGpuImages", "lr_momentum2");
 
@@ -153,9 +153,9 @@ void RenderNodeSRClearGradient::ExecuteFrame(IRenderCommandList& cmdList)
     binder_->ClearBindings();
     binder_->BindImage(0, lrGradient_);
     binder_->BindImage(1, lossOutput_);
-    binder_->BindImage(2, debugOutput_);
+    binder_->BindImage(2, predictedColorOutput_);
     binder_->BindImage(3, predictedBaseColor_);
-    binder_->BindImage(4, dL_dBaseColor_);
+    binder_->BindImage(4, dLossDSampledTexture_);
     binder_->BindImage(5, lrMomentum1_);
     binder_->BindImage(6, lrMomentum2_);
     binder_->BindBuffer(7, lrGradientSsbo_.GetHandle(), 0u);
