@@ -13,20 +13,16 @@ layout(set = 0, binding = 6) uniform uMaskUbo {
 };
 layout(set = 0, binding = 7, rgba32f) uniform image2D lrTexture;
 
-const uint MASK_BASE_COLOR = 1u << 0u;
 const uint MASK_NORMAL     = 1u << 1u;
 const uint MASK_MATERIAL   = 1u << 2u;
 const uint MASK_EMISSIVE   = 1u << 3u;
 const uint MASK_AO         = 1u << 4u;
 
-layout(push_constant, std430) uniform uPushConstant {
-    ivec2 destSize;
-};
-
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 void main() {
     ivec2 destCoord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 destSize = imageSize(lrTexture);
     
     if (destCoord.x >= destSize.x || destCoord.y >= destSize.y) {
         return;

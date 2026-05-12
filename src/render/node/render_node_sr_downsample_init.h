@@ -1,8 +1,6 @@
 #ifndef RENDER_NODE_SR_DOWNSAMPLE_INIT_H
 #define RENDER_NODE_SR_DOWNSAMPLE_INIT_H
 
-#include <base/containers/array_view.h>
-#include <base/math/vector.h>
 #include <core/plugin/intf_interface_helper.h>
 #include <render/namespace.h>
 #include <render/nodecontext/intf_pipeline_descriptor_set_binder.h>
@@ -31,22 +29,12 @@ public:
     static IRenderNode* Create();
     static void Destroy(IRenderNode* instance);
 
-    // Configuration
-    struct Config {
-        uint32_t lrWidth = 1024;
-        uint32_t lrHeight = 1024;
-        bool initialized = false;  // Track if LR texture has been initialized
-    };
-
-    void SetConfig(const Config& config) { config_ = config; }
-    const Config& GetConfig() const { return config_; }
-
 private:
     void DispatchDownsampleInit(IRenderCommandList& cmdList);
 
     IRenderNodeContextManager* renderNodeContextMgr_ { nullptr };
 
-    Config config_;
+    bool initialized_ { false };
 
     // high-res raw textures for downsampling
     RenderHandle rawAlbedo_;

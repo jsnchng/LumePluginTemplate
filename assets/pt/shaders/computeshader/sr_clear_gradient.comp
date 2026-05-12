@@ -17,8 +17,6 @@ layout(push_constant) uniform PushConstants {
     uint shouldClearBuffers;  // 1 = clear all buffers, 0 = only clear gradient
     uint gtWidth;
     uint gtHeight;
-    uint lrWidth;
-    uint lrHeight;
 } pc;
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
@@ -30,7 +28,7 @@ void main() {
     ivec2 gradientSize = imageSize(uLRGradient);
     if (destCoord.x < gradientSize.x && destCoord.y < gradientSize.y) {
         imageStore(uLRGradient, destCoord, vec4(0.0));
-        uint idx = (uint(destCoord.y) * pc.lrWidth + uint(destCoord.x)) * 4u;
+        uint idx = (uint(destCoord.y) * uint(gradientSize.x) + uint(destCoord.x)) * 4u;
         uLRGradientSsbo[idx + 0u] = 0;
         uLRGradientSsbo[idx + 1u] = 0;
         uLRGradientSsbo[idx + 2u] = 0;
@@ -48,7 +46,8 @@ void main() {
         }
         
         // Clear momentum buffers (LR size)
-        if (destCoord.x < pc.lrWidth && destCoord.y < pc.lrHeight) {
+        ivec2 momentumSize = imageSize(uLRMomentum1);
+        if (destCoord.x < momentumSize.x && destCoord.y < momentumSize.y) {
             imageStore(uLRMomentum1, destCoord, vec4(0.0));
             imageStore(uLRMomentum2, destCoord, vec4(0.0));
         }

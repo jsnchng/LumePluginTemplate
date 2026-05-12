@@ -85,10 +85,10 @@ void RenderNodeSRDownsampleInit::InitNode(IRenderNodeContextManager& renderNodeC
 
 void RenderNodeSRDownsampleInit::ExecuteFrame(IRenderCommandList& cmdList)
 {
-    if (!config_.initialized) {
+    if (!initialized_) {
         DispatchDownsampleInit(cmdList);
         cmdList.AddCustomBarrierPoint();
-        config_.initialized = true;
+        initialized_ = true;
     }
 }
 
@@ -136,20 +136,9 @@ void RenderNodeSRDownsampleInit::DispatchDownsampleInit(IRenderCommandList& cmdL
                                 binder_->GetDescriptorSetLayoutBindingResources());
     cmdList.BindDescriptorSet(0U, binder_->GetDescriptorSetHandle());
     
-    // Push constants
-    struct PushConstantData {
-        uint32_t lrWidth;
-        uint32_t lrHeight;
-    } pc;
-    pc.lrWidth = config_.lrWidth;
-    pc.lrHeight = config_.lrHeight;
-    
-    constexpr PushConstant pushConstant { ShaderStageFlagBits::CORE_SHADER_STAGE_COMPUTE_BIT, sizeof(PushConstantData) };
-    cmdList.PushConstantData(pushConstant, arrayviewU8(pc));
-    
-    // Dispatch
-    const uint32_t groupX = config_.lrWidth / threadGroupSize_.x;
-    const uint32_t groupY = config_.lrHeight / threadGroupSize_.y;
+    const GpuImageDesc lrDesc = renderNodeContextMgr_->GetGpuResourceManager().GetImageDescriptor(lrTexture_);
+    const uint32_t groupX = (lrDesc.width + threadGroupSize_.x - 1u) / threadGroupSize_.x;
+    const uint32_t groupY = (lrDesc.height + threadGroupSize_.y - 1u) / threadGroupSize_.y;
     cmdList.Dispatch(groupX, groupY, 1);
 }
 

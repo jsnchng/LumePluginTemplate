@@ -169,22 +169,19 @@ void RenderNodeSRClearGradient::ExecuteFrame(IRenderCommandList& cmdList)
         uint32_t shouldClearBuffers;  // 1 = clear all buffers (view switch), 0 = only clear gradient
         uint32_t gtWidth;
         uint32_t gtHeight;
-        uint32_t lrWidth;
-        uint32_t lrHeight;
     } pc;
     
     pc.shouldClearBuffers = viewSwitched_ ? 1u : 0u;
     pc.gtWidth = gtWidth_;
     pc.gtHeight = gtHeight_;
-    pc.lrWidth = lrWidth_;
-    pc.lrHeight = lrHeight_;
     
     constexpr PushConstant pushConstant { ShaderStageFlagBits::CORE_SHADER_STAGE_COMPUTE_BIT, sizeof(PushConstantData) };
     cmdList.PushConstantData(pushConstant, arrayviewU8(pc));
 
-    // Dispatch based on max size needed (GT size for clearing all buffers)
-    const uint32_t groupX = (gtWidth_ + threadGroupSize_.x - 1u) / threadGroupSize_.x;
-    const uint32_t groupY = (gtHeight_ + threadGroupSize_.y - 1u) / threadGroupSize_.y;
+    const uint32_t dispatchWidth = (gtWidth_ > lrWidth_) ? gtWidth_ : lrWidth_;
+    const uint32_t dispatchHeight = (gtHeight_ > lrHeight_) ? gtHeight_ : lrHeight_;
+    const uint32_t groupX = (dispatchWidth + threadGroupSize_.x - 1u) / threadGroupSize_.x;
+    const uint32_t groupY = (dispatchHeight + threadGroupSize_.y - 1u) / threadGroupSize_.y;
     cmdList.Dispatch(groupX, groupY, 1u);
     
     // Reset flag after use
