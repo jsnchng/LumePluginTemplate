@@ -28,10 +28,8 @@ layout(location = 0) out vec4 outColor;
 layout(input_attachment_index = 0, set = 1, binding = 4) uniform subpassInput uGBufferUv;
 layout(input_attachment_index = 0, set = 1, binding = 5) uniform subpassInput uGBufferGeomNormal;
 layout(input_attachment_index = 0, set = 1, binding = 6) uniform subpassInput uGBufferTangentW;
-// resources: set=1 and binding=0/1 are both defined in .shaderpl, added via resources in .rng/.json
 layout(set = 2, binding = 0) uniform texture2D uLRTexture;
 layout(set = 2, binding = 1) uniform sampler uLRSamplerRepeat;
-layout(set = 2, binding = 2) uniform texture2D uLRTextureAlias;
 layout(set = 2, binding = 3) uniform uMaskUbo {
     uint uMaskFlags;
 };

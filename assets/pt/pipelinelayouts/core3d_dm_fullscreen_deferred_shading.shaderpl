@@ -40,7 +40,6 @@
             "bindings": [
                 { "binding" : 0, "descriptorType" : "sampled_image", "descriptorCount": 1, "shaderStageFlags" : "fragment_bit" },
                 { "binding" : 1, "descriptorType" : "sampler", "descriptorCount": 1, "shaderStageFlags" : "fragment_bit" },
-                { "binding" : 2, "descriptorType" : "sampled_image", "descriptorCount": 1, "shaderStageFlags" : "fragment_bit" },
                 { "binding" : 3, "descriptorType" : "uniform_buffer", "descriptorCount": 1, "shaderStageFlags" : "fragment_bit" },
                 { "binding" : 4, "descriptorType" : "storage_image", "descriptorCount": 1, "shaderStageFlags" : "fragment_bit" },
                 { "binding" : 5, "descriptorType" : "storage_image", "descriptorCount": 1, "shaderStageFlags" : "fragment_bit" }

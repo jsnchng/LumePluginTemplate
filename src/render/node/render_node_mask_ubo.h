@@ -39,11 +39,6 @@ private:
     BASE_NS::string bufferShareName_;
     bool initialized_ { false };
 
-    struct JsonInputs {
-        uint32_t maskValue { 0 };
-        BASE_NS::string bufferShareName;
-    };
-    JsonInputs jsonInputs_;
 };
 
 RENDER_END_NAMESPACE()

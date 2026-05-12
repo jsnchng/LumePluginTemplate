@@ -460,11 +460,6 @@
                     },
                     {
                         "set": 2,
-                        "binding": 2,
-                        "name": "lrTexture"
-                    },
-                    {
-                        "set": 2,
                         "binding": 4,
                         "name": "predicted_base_color"
                     },
