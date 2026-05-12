@@ -171,11 +171,11 @@ void main() {
     }
 
     // 我们将反向传播提前到deferred shading阶段，并直接将结果存入缓冲区
-    vec3 dLoss_dSampledTexture = imageLoad(dLoss_dSampledTexture_buffer, pixelCoord).rgb;
+    vec4 dLoss_dSampledTexture = imageLoad(dLoss_dSampledTexture_buffer, pixelCoord);
 
     // Step 9: Accumulate gradient
-    // 由于我们把反向传播提前了，所以直接把dL_dBaseColor累加到对应的texel即可
-    accumulateGradient(texUV, vec4(dLoss_dSampledTexture, 0.0));
+    // 由于我们把反向传播提前了，所以直接把dLoss_dSampledTexture累加到对应的texel即可
+    accumulateGradient(texUV, dLoss_dSampledTexture);
 
     // Debug Output
     vec3 testColor = imageLoad(predictedBaseColor, pixelCoord).rgb;
