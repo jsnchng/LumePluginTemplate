@@ -52,10 +52,6 @@ public:
         float beta2 = 0.999f;
         float epsilon = 1e-8f;
         uint32_t iteration = 0;
-        uint32_t gtWidth = 1024;
-        uint32_t gtHeight = 1024;
-        uint32_t lrWidth = 1024;
-        uint32_t lrHeight = 1024;
         bool enabled = true;
     };
 

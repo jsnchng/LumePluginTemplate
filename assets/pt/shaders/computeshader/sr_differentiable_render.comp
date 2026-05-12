@@ -3,77 +3,67 @@
 #extension GL_ARB_shading_language_420pack : enable
 
 layout(set = 0, binding = 0) uniform texture2D uDepthBuffer;
+layout(set = 0, binding = 1, rgba32f) readonly uniform image2D uLRGradient;
 layout(set = 0, binding = 3) uniform texture2D uUVBuffer;
-
 layout(set = 0, binding = 6) uniform sampler uSampler;
-
 layout(set = 0, binding = 10, rgba32f) uniform image2D debugOutput;
 layout(set = 0, binding = 11, r11f_g11f_b10f) uniform image2D predictedBaseColor;
-layout(set = 0, binding = 12, rgba32f) uniform image2D dLoss_dSampledTexture_buffer;
-
+layout(set = 0, binding = 12, rgba32f) uniform image2D dLoss_dSampledTextureBuffer;
 layout(set = 0, binding = 13, std430) buffer LRGradientSsbo {
     int uLRGradientSsbo[];
 };
 
-layout(push_constant, std430) uniform uPushConstant {
-    uint gtWidth;
-    uint gtHeight;
-    uint lrWidth;
-    uint lrHeight;
-    uint useUVBuffer;
-};
-
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
-// ================================================================
-// Bilinear sampling and gradient accumulation
-// ================================================================
-vec4 sanitizeGradient(vec4 grad) {
+const float GRADIENT_ATOMIC_SCALE = 4096.0;
+const float GRADIENT_ATOMIC_LIMIT = 2147480000.0;
+
+vec4 sanitizeGradient(vec4 grad)
+{
     if (any(isnan(grad)) || any(isinf(grad))) {
         return vec4(0.0);
     }
     return clamp(grad, vec4(-5.0), vec4(5.0));
 }
 
-const float GRADIENT_ATOMIC_SCALE = 4096.0;
-const float GRADIENT_ATOMIC_LIMIT = 2147480000.0;
-
-int encodeGradientForAtomic(float value) {
+int encodeGradientForAtomic(float value)
+{
     float scaled = round(value * GRADIENT_ATOMIC_SCALE);
     return int(clamp(scaled, -GRADIENT_ATOMIC_LIMIT, GRADIENT_ATOMIC_LIMIT));
 }
 
-void accumulateGradient(vec2 uv, vec4 dLoss_dSampledTexture) {
-    dLoss_dSampledTexture = sanitizeGradient(dLoss_dSampledTexture);
-    if (dot(dLoss_dSampledTexture, dLoss_dSampledTexture) == 0.0) return;
+void accumulateGradient(vec2 uv, vec4 dLossDSampledTexture, ivec2 lrSize)
+{
+    dLossDSampledTexture = sanitizeGradient(dLossDSampledTexture);
+    if (dot(dLossDSampledTexture, dLossDSampledTexture) == 0.0) {
+        return;
+    }
 
-    uv = fract(uv); // Since sampler is on repeat mode
+    uv = fract(uv);
+    vec2 texCoord = uv * vec2(lrSize) - 0.5;
+    ivec2 texel00 = clamp(ivec2(floor(texCoord)), ivec2(0), lrSize - ivec2(1));
 
-    vec2 texCoord = uv * vec2(lrWidth, lrHeight) - 0.5;
-    ivec2 texel00 = ivec2(floor(texCoord));
-    
     vec2 f = fract(texCoord);
     vec4 weights = vec4(
         (1.0 - f.x) * (1.0 - f.y),
         f.x * (1.0 - f.y),
         (1.0 - f.x) * f.y,
-        f.x * f.y
-    );
-    
-    texel00 = clamp(texel00, ivec2(0), ivec2(lrWidth - 1, lrHeight - 1));
-    ivec2 texel10 = clamp(ivec2(texel00.x + 1, texel00.y), ivec2(0), ivec2(lrWidth - 1, lrHeight - 1));
-    ivec2 texel01 = clamp(ivec2(texel00.x, texel00.y + 1), ivec2(0), ivec2(lrWidth - 1, lrHeight - 1));
-    ivec2 texel11 = clamp(ivec2(texel00.x + 1, texel00.y + 1), ivec2(0), ivec2(lrWidth - 1, lrHeight - 1));
-    
-    uint idx00 = (uint(texel00.y) * lrWidth + uint(texel00.x)) * 4u;
-    uint idx10 = (uint(texel10.y) * lrWidth + uint(texel10.x)) * 4u;
-    uint idx01 = (uint(texel01.y) * lrWidth + uint(texel01.x)) * 4u;
-    uint idx11 = (uint(texel11.y) * lrWidth + uint(texel11.x)) * 4u;
+        f.x * f.y);
 
-    vec4 g00 = weights.x * dLoss_dSampledTexture;
-    vec4 g10 = weights.y * dLoss_dSampledTexture;
-    vec4 g01 = weights.z * dLoss_dSampledTexture;
-    vec4 g11 = weights.w * dLoss_dSampledTexture;
+    ivec2 texel10 = clamp(ivec2(texel00.x + 1, texel00.y), ivec2(0), lrSize - ivec2(1));
+    ivec2 texel01 = clamp(ivec2(texel00.x, texel00.y + 1), ivec2(0), lrSize - ivec2(1));
+    ivec2 texel11 = clamp(ivec2(texel00.x + 1, texel00.y + 1), ivec2(0), lrSize - ivec2(1));
+
+    uint rowStride = uint(lrSize.x);
+    uint idx00 = (uint(texel00.y) * rowStride + uint(texel00.x)) * 4u;
+    uint idx10 = (uint(texel10.y) * rowStride + uint(texel10.x)) * 4u;
+    uint idx01 = (uint(texel01.y) * rowStride + uint(texel01.x)) * 4u;
+    uint idx11 = (uint(texel11.y) * rowStride + uint(texel11.x)) * 4u;
+
+    vec4 g00 = weights.x * dLossDSampledTexture;
+    vec4 g10 = weights.y * dLossDSampledTexture;
+    vec4 g01 = weights.z * dLossDSampledTexture;
+    vec4 g11 = weights.w * dLossDSampledTexture;
 
     atomicAdd(uLRGradientSsbo[idx00 + 0u], encodeGradientForAtomic(g00.r));
     atomicAdd(uLRGradientSsbo[idx00 + 1u], encodeGradientForAtomic(g00.g));
@@ -96,51 +86,24 @@ void accumulateGradient(vec2 uv, vec4 dLoss_dSampledTexture) {
     atomicAdd(uLRGradientSsbo[idx11 + 3u], encodeGradientForAtomic(g11.a));
 }
 
-// ================================================================
-// Main
-// ================================================================
-void main() {
-
+void main()
+{
     ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
-    
-    if (pixelCoord.x >= int(gtWidth) || pixelCoord.y >= int(gtHeight)) {
+    ivec2 gtSize = textureSize(sampler2D(uDepthBuffer, uSampler), 0);
+    if (pixelCoord.x >= gtSize.x || pixelCoord.y >= gtSize.y) {
         return;
     }
-    
-    vec2 screenUV = (vec2(pixelCoord) + 0.5) / vec2(gtWidth, gtHeight);
-    
-    // Step 1: Read G-Buffer
-    float depth = textureLod(sampler2D(uDepthBuffer, uSampler), screenUV, 0.0).r;
-    
 
-
-    // Skip background pixels
+    vec2 screenUv = (vec2(pixelCoord) + 0.5) / vec2(gtSize);
+    float depth = textureLod(sampler2D(uDepthBuffer, uSampler), screenUv, 0.0).r;
     if (depth >= 1.0) {
         return;
     }
-    
 
-    
-    // Step 2: Get UV for texture sampling
-    vec2 texUV;
-    if (useUVBuffer != 0u) {
-        vec4 uvData = textureLod(sampler2D(uUVBuffer, uSampler), screenUV, 0.0);
-        texUV = uvData.xy;
-    } else {
-        texUV = screenUV;
-    }
+    ivec2 lrSize = imageSize(uLRGradient);
+    vec2 texUv = textureLod(sampler2D(uUVBuffer, uSampler), screenUv, 0.0).xy;
+    vec4 dLossDSampledTexture = imageLoad(dLoss_dSampledTextureBuffer, pixelCoord);
+    accumulateGradient(texUv, dLossDSampledTexture, lrSize);
 
-    // 我们将反向传播提前到deferred shading阶段，并直接将结果存入缓冲区
-    vec4 dLoss_dSampledTexture = imageLoad(dLoss_dSampledTexture_buffer, pixelCoord);
-
-    // Step 9: Accumulate gradient
-    // 由于我们把反向传播提前了，所以直接把dLoss_dSampledTexture累加到对应的texel即可
-    accumulateGradient(texUV, dLoss_dSampledTexture);
-
-    // Debug Output
-    vec3 testColor = imageLoad(predictedBaseColor, pixelCoord).rgb;
-    vec4 debugColor = vec4(testColor, 1.0);
-    imageStore(debugOutput, pixelCoord, debugColor);
-
-    
+    imageStore(debugOutput, pixelCoord, vec4(imageLoad(predictedBaseColor, pixelCoord).rgb, 1.0));
 }

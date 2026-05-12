@@ -183,44 +183,20 @@ void RenderNodeSRTraining::DispatchDifferentiableRender(IRenderCommandList& cmdL
     
     differentiableRenderBinder_->ClearBindings();
     differentiableRenderBinder_->BindImage(0, depthBuffer_);
+    differentiableRenderBinder_->BindImage(1, lrGradient_);
     differentiableRenderBinder_->BindImage(3, uvBuffer_);
     differentiableRenderBinder_->BindSampler(6, sampler_);
     differentiableRenderBinder_->BindImage(10, debugOutput_);
     differentiableRenderBinder_->BindImage(11, predictedBaseColor_);
     differentiableRenderBinder_->BindImage(12, dL_dBaseColor_);
     differentiableRenderBinder_->BindBuffer(13, lrGradientSsbo_, 0u);
-    
-    
     cmdList.UpdateDescriptorSet(differentiableRenderBinder_->GetDescriptorSetHandle(),
                                  differentiableRenderBinder_->GetDescriptorSetLayoutBindingResources());
     cmdList.BindDescriptorSet(0U, differentiableRenderBinder_->GetDescriptorSetHandle());
-    
-    // Push constants (must match sr_differentiable_render.comp layout)
-    /**
-     * Note: Although Vulkan's maxPushConstantsSize is 256 bytes,
-     * the MAX_PUSH_CONSTANT_BYTE_SIZE is intentionally capped at 128 bytes,
-     * see line 39 of LumeRender/api/render/device/pipeline_layout_desc.h.
-     * Any data exceeding this limit will be TRUNCATED.
-     */
-    struct PushConstantData {
-        uint32_t gtWidth;
-        uint32_t gtHeight;
-        uint32_t lrWidth;
-        uint32_t lrHeight;
-        uint32_t useUVBuffer;
-    } pc;
-    
-    pc.gtWidth = config_.gtWidth;
-    pc.gtHeight = config_.gtHeight;
-    pc.lrWidth = config_.lrWidth;
-    pc.lrHeight = config_.lrHeight;
-    pc.useUVBuffer = RenderHandleUtil::IsValid(uvBuffer_) ? 1u : 0u;
-    
-    constexpr PushConstant pushConstant { ShaderStageFlagBits::CORE_SHADER_STAGE_COMPUTE_BIT, sizeof(PushConstantData) };
-    cmdList.PushConstantData(pushConstant, arrayviewU8(pc));
-    
-    const uint32_t groupX = (config_.gtWidth + psos_.differentiableRenderTGS.x - 1) / psos_.differentiableRenderTGS.x;
-    const uint32_t groupY = (config_.gtHeight + psos_.differentiableRenderTGS.y - 1) / psos_.differentiableRenderTGS.y;
+
+    const GpuImageDesc depthDesc = renderNodeContextMgr_->GetGpuResourceManager().GetImageDescriptor(depthBuffer_);
+    const uint32_t groupX = (depthDesc.width + psos_.differentiableRenderTGS.x - 1u) / psos_.differentiableRenderTGS.x;
+    const uint32_t groupY = (depthDesc.height + psos_.differentiableRenderTGS.y - 1u) / psos_.differentiableRenderTGS.y;
     cmdList.Dispatch(groupX, groupY, 1);
 }
 
@@ -259,8 +235,9 @@ void RenderNodeSRTraining::DispatchAdamOptimizer(IRenderCommandList& cmdList)
     constexpr PushConstant pushConstant { ShaderStageFlagBits::CORE_SHADER_STAGE_COMPUTE_BIT, sizeof(PushConstantData) };
     cmdList.PushConstantData(pushConstant, arrayviewU8(pc));
     
-    const uint32_t groupX = (config_.lrWidth + psos_.adamTGS.x - 1) / psos_.adamTGS.x;
-    const uint32_t groupY = (config_.lrHeight + psos_.adamTGS.y - 1) / psos_.adamTGS.y;
+    const GpuImageDesc lrDesc = renderNodeContextMgr_->GetGpuResourceManager().GetImageDescriptor(lrTexture_);
+    const uint32_t groupX = (lrDesc.width + psos_.adamTGS.x - 1u) / psos_.adamTGS.x;
+    const uint32_t groupY = (lrDesc.height + psos_.adamTGS.y - 1u) / psos_.adamTGS.y;
     cmdList.Dispatch(groupX, groupY, 1);
 }
 
