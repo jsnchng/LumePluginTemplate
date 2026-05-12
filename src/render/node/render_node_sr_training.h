@@ -120,7 +120,7 @@ private:
     RenderHandle uvBuffer_;
     RenderHandle baseColorBuffer_;  // G-Buffer base color (for downsample init)
     
-    // LR texture (base color to optimize)
+    // LR texture selected by maskValue for optimization
     RenderHandle lrTexture_;
     
     // GT image (rendered result from deferred shading)
@@ -144,7 +144,7 @@ private:
     // Predicted Base Color
     RenderHandle predictedBaseColor_;
 
-    // dL_dBaseColor
+    // dLoss/dSampledTexture from deferred shading
     RenderHandle dL_dBaseColor_;
 
     // Pipeline handles

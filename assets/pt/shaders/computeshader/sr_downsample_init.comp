@@ -4,15 +4,20 @@
 
 layout(set = 0, binding = 0) uniform sampler defaultSampler;
 layout(set = 0, binding = 1) uniform texture2D rawAlbedo;
-layout(set = 0, binding = 2, rgba8) uniform image2D lrAlbedo;
-layout(set = 0, binding = 3) uniform texture2D rawNormal;
-layout(set = 0, binding = 4, rgba32f) uniform image2D lrNormal;
-layout(set = 0, binding = 5) uniform texture2D rawMaterial;
-layout(set = 0, binding = 6, rgba8) uniform image2D lrMaterial;
-layout(set = 0, binding = 7) uniform texture2D rawEmissive;
-layout(set = 0, binding = 8, rgba8) uniform image2D lrEmissive;
-layout(set = 0, binding = 9) uniform texture2D rawAO;
-layout(set = 0, binding = 10, rgba8) uniform image2D lrAO;
+layout(set = 0, binding = 2) uniform texture2D rawNormal;
+layout(set = 0, binding = 3) uniform texture2D rawMaterial;
+layout(set = 0, binding = 4) uniform texture2D rawEmissive;
+layout(set = 0, binding = 5) uniform texture2D rawAO;
+layout(set = 0, binding = 6) uniform uMaskUbo {
+    uint uMaskFlags;
+};
+layout(set = 0, binding = 7, rgba32f) uniform image2D lrTexture;
+
+const uint MASK_BASE_COLOR = 1u << 0u;
+const uint MASK_NORMAL     = 1u << 1u;
+const uint MASK_MATERIAL   = 1u << 2u;
+const uint MASK_EMISSIVE   = 1u << 3u;
+const uint MASK_AO         = 1u << 4u;
 
 layout(push_constant, std430) uniform uPushConstant {
     ivec2 destSize;
@@ -29,16 +34,16 @@ void main() {
 
     vec2 uv = (vec2(destCoord) + 0.5) / vec2(destSize);
 
-    vec4 albedo = textureLod(sampler2D(rawAlbedo, defaultSampler), uv, 0.0);
-    // albedo = vec4(0.2, 0.2, 0.2, 1.0); // for debug
-    vec4 normal = textureLod(sampler2D(rawNormal, defaultSampler), uv, 0.0);
-    vec4 material = textureLod(sampler2D(rawMaterial, defaultSampler), uv, 0.0);
-    vec4 emissive = textureLod(sampler2D(rawEmissive, defaultSampler), uv, 0.0);
-    vec4 ao = textureLod(sampler2D(rawAO, defaultSampler), uv, 0.0);
+    vec4 selected = textureLod(sampler2D(rawAlbedo, defaultSampler), uv, 0.0);
+    if ((uMaskFlags & MASK_NORMAL) == MASK_NORMAL) {
+        selected = textureLod(sampler2D(rawNormal, defaultSampler), uv, 0.0);
+    } else if ((uMaskFlags & MASK_MATERIAL) == MASK_MATERIAL) {
+        selected = textureLod(sampler2D(rawMaterial, defaultSampler), uv, 0.0);
+    } else if ((uMaskFlags & MASK_EMISSIVE) == MASK_EMISSIVE) {
+        selected = textureLod(sampler2D(rawEmissive, defaultSampler), uv, 0.0);
+    } else if ((uMaskFlags & MASK_AO) == MASK_AO) {
+        selected = textureLod(sampler2D(rawAO, defaultSampler), uv, 0.0);
+    }
 
-    imageStore(lrAlbedo, destCoord, albedo);
-    imageStore(lrNormal, destCoord, normal);
-    imageStore(lrMaterial, destCoord, material);
-    imageStore(lrEmissive, destCoord, emissive);
-    imageStore(lrAO, destCoord, ao);
+    imageStore(lrTexture, destCoord, selected);
 }

@@ -9,7 +9,7 @@
             "typeName": "RenderNodeMaskUbo",
             "nodeName": "MASK_UBO_NODE",
             "custom": {
-                "maskValue": 2,
+                "maskValue": 1,
                 "bufferShareName": "mask_ubo_buffer"
             }
         },
@@ -205,52 +205,12 @@
             "nodeName": "LOW_RESOLUTION_TEXTURES",
             "gpuImageDescs": [
                 {
-                    "name": "lowres_albedo",
-                    "shareName": "lowres_albedo",
+                    "name": "lrTexture",
+                    "shareName": "lrTexture",
                     "format": "r32g32b32a32_sfloat",
                     "width": 1024,
                     "height": 1024,
                     "usageFlags": "sampled | storage | transfer_src",
-                    "memoryPropertyFlags": "device_local",
-                    "engineCreationFlags": "dynamic_barriers"
-                },
-                {
-                    "name": "lowres_normal",
-                    "shareName": "lowres_normal",
-                    "format": "r32g32b32a32_sfloat",
-                    "width": 1024,
-                    "height": 1024,
-                    "usageFlags": "sampled | storage",
-                    "memoryPropertyFlags": "device_local",
-                    "engineCreationFlags": "dynamic_barriers"
-                },
-                {
-                    "name": "lowres_material",
-                    "shareName": "lowres_material",
-                    "format": "r8g8b8a8_unorm",
-                    "width": 1024,
-                    "height": 1024,
-                    "usageFlags": "sampled | storage",
-                    "memoryPropertyFlags": "device_local",
-                    "engineCreationFlags": "dynamic_barriers"
-                },
-                {
-                    "name": "lowres_emissive",
-                    "shareName": "lowres_emissive",
-                    "format": "r8g8b8a8_unorm",
-                    "width": 1024,
-                    "height": 1024,
-                    "usageFlags": "sampled | storage",
-                    "memoryPropertyFlags": "device_local",
-                    "engineCreationFlags": "dynamic_barriers"
-                },
-                {
-                    "name": "lowres_ao",
-                    "shareName": "lowres_ao",
-                    "format": "r8g8b8a8_unorm",
-                    "width": 1024,
-                    "height": 1024,
-                    "usageFlags": "sampled | storage",
                     "memoryPropertyFlags": "device_local",
                     "engineCreationFlags": "dynamic_barriers"
                 },
@@ -277,11 +237,8 @@
             "custom": {
                 "renderDataStoreName": "RenderDataStoreDefaultMaterial",
                 "targetMaterialIndex": 1,
-                "albedoShareName": "lowres_albedo",
-                "normalShareName": "lowres_normal",
-                "materialShareName": "lowres_material",
-                "emissiveShareName": "lowres_emissive",
-                "aoShareName": "lowres_ao",
+                "lrTextureShareName": "lrTexture",
+                "maskBufferShareName": "mask_ubo_buffer",
                 "defaultSamplerName": "CORE_DEFAULT_SAMPLER_LINEAR_CLAMP",
                 "shareNameFromNode": "LOW_RESOLUTION_TEXTURES"
             }
@@ -499,12 +456,12 @@
                     {
                         "set": 2,
                         "binding": 0,
-                        "name": "lowres_albedo"
+                        "name": "lrTexture"
                     },
                     {
                         "set": 2,
                         "binding": 2,
-                        "name": "lowres_normal"
+                        "name": "lrTexture"
                     },
                     {
                         "set": 2,
@@ -578,7 +535,7 @@
                     {
                         "set": 0,
                         "binding": 3,
-                        "name": "lowres_normal"
+                        "name": "lrTexture"
                     },
                     {
                         "set": 0,

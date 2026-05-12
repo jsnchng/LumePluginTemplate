@@ -28,13 +28,16 @@ void RenderNodeSRDownsampleInit::InitNode(IRenderNodeContextManager& renderNodeC
     const auto customJsonVal = nodeJsonVal.find("custom");
     const auto renderDataStoreName = parserUtil.GetStringValue(*customJsonVal, "renderDataStoreName");
     const auto targetMaterialIndex = parserUtil.GetUintValue(*customJsonVal, "targetMaterialIndex");
-    const auto albedoShareName = parserUtil.GetStringValue(*customJsonVal, "albedoShareName");
-    const auto normalShareName = parserUtil.GetStringValue(*customJsonVal, "normalShareName");
-    const auto materialShareName = parserUtil.GetStringValue(*customJsonVal, "materialShareName");
-    const auto emissiveShareName = parserUtil.GetStringValue(*customJsonVal, "emissiveShareName");
-    const auto aoShareName = parserUtil.GetStringValue(*customJsonVal, "aoShareName");
+    auto lrTextureShareName = parserUtil.GetStringValue(*customJsonVal, "lrTextureShareName");
+    auto maskBufferShareName = parserUtil.GetStringValue(*customJsonVal, "maskBufferShareName");
     const auto shareNameFromNode = parserUtil.GetStringValue(*customJsonVal, "shareNameFromNode");
     const auto defaultSamplerName = parserUtil.GetStringValue(*customJsonVal, "defaultSamplerName");
+    if (lrTextureShareName.empty()) {
+        lrTextureShareName = "lrTexture";
+    }
+    if (maskBufferShareName.empty()) {
+        maskBufferShareName = "mask_ubo_buffer";
+    }
     // Get high-res raw textures
     const auto& renderDataStoreMgr = renderNodeContextMgr_->GetRenderDataStoreManager();
     const auto* dataStoreMaterial = static_cast<CORE3D_NS::IRenderDataStoreDefaultMaterial*>(
@@ -46,13 +49,10 @@ void RenderNodeSRDownsampleInit::InitNode(IRenderNodeContextManager& renderNodeC
     rawMaterial_ = currentHandles.images[2];
     rawEmissive_ = currentHandles.images[3];
     rawAo_ = currentHandles.images[4];
-    // Get low-res textures
+    // Get low-res texture and mask selection buffer
     const auto& rngShareMgr = renderNodeContextMgr_->GetRenderNodeGraphShareManager();
-    lrAlbedo_ = rngShareMgr.GetRegisteredRenderNodeOutput(shareNameFromNode, albedoShareName);
-    lrNormal_ = rngShareMgr.GetRegisteredRenderNodeOutput(shareNameFromNode, normalShareName);
-    lrMaterial_ = rngShareMgr.GetRegisteredRenderNodeOutput(shareNameFromNode, materialShareName);
-    lrEmissive_ = rngShareMgr.GetRegisteredRenderNodeOutput(shareNameFromNode, emissiveShareName);
-    lrAo_ = rngShareMgr.GetRegisteredRenderNodeOutput(shareNameFromNode, aoShareName);
+    lrTexture_ = rngShareMgr.GetRegisteredRenderNodeOutput(shareNameFromNode, lrTextureShareName);
+    maskBuffer_ = rngShareMgr.GetRegisteredRenderNodeOutput("MASK_UBO_NODE", maskBufferShareName);
     // Get default sampler
     const auto& gpuResourceMgr = renderNodeContextMgr_->GetGpuResourceManager();
     defaultSampler_ = gpuResourceMgr.GetSamplerHandle(defaultSamplerName);
@@ -95,11 +95,8 @@ void RenderNodeSRDownsampleInit::ExecuteFrame(IRenderCommandList& cmdList)
 void RenderNodeSRDownsampleInit::DispatchDownsampleInit(IRenderCommandList& cmdList)
 {
     // Check resources
-    if (!RenderHandleUtil::IsValid(lrAlbedo_)
-        || !RenderHandleUtil::IsValid(lrNormal_)
-        || !RenderHandleUtil::IsValid(lrMaterial_)
-        || !RenderHandleUtil::IsValid(lrEmissive_)
-        || !RenderHandleUtil::IsValid(lrAo_)
+    if (!RenderHandleUtil::IsValid(lrTexture_)
+        || !RenderHandleUtil::IsValid(maskBuffer_)
         || !RenderHandleUtil::IsValid(defaultSampler_)) {
         return;
     }
@@ -129,15 +126,12 @@ void RenderNodeSRDownsampleInit::DispatchDownsampleInit(IRenderCommandList& cmdL
     binder_->ClearBindings();
     binder_->BindSampler(0, defaultSampler_);
     binder_->BindImage(1, rawAlbedo_);
-    binder_->BindImage(2, lrAlbedo_);
-    binder_->BindImage(3, rawNormal_);
-    binder_->BindImage(4, lrNormal_);
-    binder_->BindImage(5, rawMaterial_);
-    binder_->BindImage(6, lrMaterial_);
-    binder_->BindImage(7, rawEmissive_);
-    binder_->BindImage(8, lrEmissive_);
-    binder_->BindImage(9, rawAo_);
-    binder_->BindImage(10, lrAo_);
+    binder_->BindImage(2, rawNormal_);
+    binder_->BindImage(3, rawMaterial_);
+    binder_->BindImage(4, rawEmissive_);
+    binder_->BindImage(5, rawAo_);
+    binder_->BindBuffer(6, maskBuffer_, 0u);
+    binder_->BindImage(7, lrTexture_);
     cmdList.UpdateDescriptorSet(binder_->GetDescriptorSetHandle(),
                                 binder_->GetDescriptorSetLayoutBindingResources());
     cmdList.BindDescriptorSet(0U, binder_->GetDescriptorSetHandle());

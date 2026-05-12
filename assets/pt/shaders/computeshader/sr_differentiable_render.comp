@@ -31,8 +31,8 @@ layout(set = 0, binding = 10, rgba32f) uniform image2D debugOutput;
 // Predicted Base Color (set 0, binding 11)
 layout(set = 0, binding = 11, r11f_g11f_b10f) uniform image2D predictedBaseColor;
 
-// dL_dBaseColor (set 0, binding 12)
-layout(set = 0, binding = 12, rgba32f) uniform image2D dL_dBaseColor_buffer;
+// dLoss/dSampledTexture from deferred shading (set 0, binding 12)
+layout(set = 0, binding = 12, rgba32f) uniform image2D dLoss_dSampledTexture_buffer;
 
 // Authoritative LR gradient storage. Values are packed as fixed-point RGBA int per LR texel.
 layout(set = 0, binding = 13, std430) buffer LRGradientSsbo {
@@ -83,9 +83,9 @@ int encodeGradientForAtomic(float value) {
     return int(clamp(scaled, -GRADIENT_ATOMIC_LIMIT, GRADIENT_ATOMIC_LIMIT));
 }
 
-void accumulateGradient(vec2 uv, vec4 dL_dBaseColor) {
-    dL_dBaseColor = sanitizeGradient(dL_dBaseColor);
-    if (dot(dL_dBaseColor, dL_dBaseColor) == 0.0) return;
+void accumulateGradient(vec2 uv, vec4 dLoss_dSampledTexture) {
+    dLoss_dSampledTexture = sanitizeGradient(dLoss_dSampledTexture);
+    if (dot(dLoss_dSampledTexture, dLoss_dSampledTexture) == 0.0) return;
 
     uv = fract(uv); // Since sampler is on repeat mode
 
@@ -110,10 +110,10 @@ void accumulateGradient(vec2 uv, vec4 dL_dBaseColor) {
     uint idx01 = (uint(texel01.y) * lrWidth + uint(texel01.x)) * 4u;
     uint idx11 = (uint(texel11.y) * lrWidth + uint(texel11.x)) * 4u;
 
-    vec4 g00 = weights.x * dL_dBaseColor;
-    vec4 g10 = weights.y * dL_dBaseColor;
-    vec4 g01 = weights.z * dL_dBaseColor;
-    vec4 g11 = weights.w * dL_dBaseColor;
+    vec4 g00 = weights.x * dLoss_dSampledTexture;
+    vec4 g10 = weights.y * dLoss_dSampledTexture;
+    vec4 g01 = weights.z * dLoss_dSampledTexture;
+    vec4 g11 = weights.w * dLoss_dSampledTexture;
 
     atomicAdd(uLRGradientSsbo[idx00 + 0u], encodeGradientForAtomic(g00.r));
     atomicAdd(uLRGradientSsbo[idx00 + 1u], encodeGradientForAtomic(g00.g));
@@ -171,11 +171,11 @@ void main() {
     }
 
     // 我们将反向传播提前到deferred shading阶段，并直接将结果存入缓冲区
-    vec3 dL_dBaseColor = imageLoad(dL_dBaseColor_buffer, pixelCoord).rgb;
+    vec3 dLoss_dSampledTexture = imageLoad(dLoss_dSampledTexture_buffer, pixelCoord).rgb;
 
     // Step 9: Accumulate gradient
     // 由于我们把反向传播提前了，所以直接把dL_dBaseColor累加到对应的texel即可
-    accumulateGradient(texUV, vec4(dL_dBaseColor, 0.0));
+    accumulateGradient(texUV, vec4(dLoss_dSampledTexture, 0.0));
 
     // Debug Output
     vec3 testColor = imageLoad(predictedBaseColor, pixelCoord).rgb;

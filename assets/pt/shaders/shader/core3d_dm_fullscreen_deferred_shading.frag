@@ -31,7 +31,7 @@ layout(input_attachment_index = 0, set = 1, binding = 6) uniform subpassInput uG
 // resources: set=1 and binding=0/1 are both defined in .shaderpl, added via resources in .rng/.json
 layout(set = 2, binding = 0) uniform texture2D uLRTexture;
 layout(set = 2, binding = 1) uniform sampler uLRSamplerRepeat;
-layout(set = 2, binding = 2) uniform texture2D uLRNormal;
+layout(set = 2, binding = 2) uniform texture2D uLRTextureAlias;
 layout(set = 2, binding = 3) uniform uMaskUbo {
     uint uMaskFlags;
 };
@@ -140,7 +140,7 @@ bool HasGBufferNormalMap()
 vec3 GetLRNormalSample()
 {
     const vec4 gBufferUv = subpassLoad(uGBufferUv);
-    return textureLod(sampler2D(uLRNormal, uLRSamplerRepeat), gBufferUv.xy, 0).xyz;
+    return textureLod(sampler2D(uLRTexture, uLRSamplerRepeat), gBufferUv.xy, 0).xyz;
 }
 
 void ApplyLRNormal(inout FullGBufferData fd, const vec3 lrNormal)
@@ -1008,6 +1008,33 @@ vec3 BackwardPbrBasicWithLRmetallicRoughness(float depthBufferSample, FullGBuffe
     return vec3(grad_m, grad_r, 0.0);
 }
 
+vec4 PbrBasicWithLRTexture(float depthBufferSample, FullGBufferData fd)
+{
+    if ((uMaskFlags & MASK_NORMAL) == MASK_NORMAL) {
+        return PbrBasicWithLRNormal(depthBufferSample, fd);
+    }
+    if ((uMaskFlags & MASK_BASE_COLOR) == MASK_BASE_COLOR) {
+        return PbrBasicWithLRBaseColor(depthBufferSample, fd);
+    }
+
+    // First-stage framework only: material/emissive/AO LR PBR variants are added later.
+    return PbrBasic(depthBufferSample, fd);
+}
+
+vec4 BackwardPbrBasicWithLRTexture(float depthBufferSample, FullGBufferData fd,
+    vec3 predictedRGB, vec3 referenceRGB)
+{
+    if ((uMaskFlags & MASK_NORMAL) == MASK_NORMAL) {
+        return vec4(BackwardPbrBasicWithLRNormal(depthBufferSample, fd, predictedRGB, referenceRGB), 1.0);
+    }
+    if ((uMaskFlags & MASK_BASE_COLOR) == MASK_BASE_COLOR) {
+        return vec4(BackwardPbrBasicWithLRBaseColor(depthBufferSample, fd, predictedRGB, referenceRGB), 1.0);
+    }
+
+    // First-stage framework only: material/emissive/AO backward variants are added later.
+    return vec4(0.0);
+}
+
 /*
 fragment shader for basic pbr materials.
 */
@@ -1025,19 +1052,8 @@ void main(void)
             outColor = UnlitShadowAlpha(depthBufferSample, fd);
         } else {
             outColor = PbrBasic(depthBufferSample, fd);
-            if ((uMaskFlags & MASK_NORMAL) == MASK_NORMAL) {
-                predictedColor = PbrBasicWithLRNormal(depthBufferSample, fd);
-            } else {
-                predictedColor = PbrBasicWithLRBaseColor(depthBufferSample, fd);
-            }
-
-            vec3 grad = vec3(0.0);
-            if ((uMaskFlags & MASK_NORMAL) == MASK_NORMAL) {
-                grad = BackwardPbrBasicWithLRNormal(depthBufferSample, fd, predictedColor.rgb, outColor.rgb);
-            } else {
-                grad = BackwardPbrBasicWithLRBaseColor(depthBufferSample, fd, predictedColor.rgb, outColor.rgb);
-            }
-            outBaseColorGrad = vec4(grad, 1.0);
+            predictedColor = PbrBasicWithLRTexture(depthBufferSample, fd);
+            outBaseColorGrad = BackwardPbrBasicWithLRTexture(depthBufferSample, fd, predictedColor.rgb, outColor.rgb);
         }
     } else {
         outColor = vec4(0.0);

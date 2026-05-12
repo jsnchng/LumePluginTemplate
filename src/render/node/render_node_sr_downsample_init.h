@@ -55,12 +55,9 @@ private:
     RenderHandle rawEmissive_;
     RenderHandle rawAo_;
 
-    // low-res textures for optimization
-    RenderHandle lrAlbedo_;
-    RenderHandle lrNormal_;
-    RenderHandle lrMaterial_;
-    RenderHandle lrEmissive_;
-    RenderHandle lrAo_;
+    // low-res texture selected by maskValue for optimization
+    RenderHandle lrTexture_;
+    RenderHandle maskBuffer_;
 
     RenderHandle defaultSampler_;
     RenderHandle defaultMaterialImage_;
