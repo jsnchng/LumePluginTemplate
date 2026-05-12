@@ -459,7 +459,7 @@ vec4 PbrBasicWithLRMaterial(float depthBufferSample, FullGBufferData fd)
     GetSampledGBuffer(inUv, fd);
 
     const vec4 gBufferUv = subpassLoad(uGBufferUv);
-    const vec2 lrRoughnessMetallic = textureLod(sampler2D(uLRTexture, uLRSamplerRepeat), gBufferUv.xy, 0).rg;
+    const vec2 lrRoughnessMetallic = textureLod(sampler2D(uLRTexture, uLRSamplerRepeat), gBufferUv.xy, 0).gb;
     fd.material.g = lrRoughnessMetallic.r;
     fd.material.b = lrRoughnessMetallic.g;
 
@@ -869,7 +869,7 @@ vec4 BackwardPbrBasicWithLRMaterial(float depthBufferSample, FullGBufferData fd,
     GetSampledGBuffer(inUv, fd);
 
     const vec4 gBufferUv = subpassLoad(uGBufferUv);
-    const vec2 lrRoughnessMetallic = textureLod(sampler2D(uLRTexture, uLRSamplerRepeat), gBufferUv.xy, 0).rg;
+    const vec2 lrRoughnessMetallic = textureLod(sampler2D(uLRTexture, uLRSamplerRepeat), gBufferUv.xy, 0).gb;
     vec4 lrMaterial = fd.material;
     lrMaterial.g = lrRoughnessMetallic.r;
     lrMaterial.b = lrRoughnessMetallic.g;
@@ -897,7 +897,7 @@ vec4 BackwardPbrBasicWithLRMaterial(float depthBufferSample, FullGBufferData fd,
     cMinus = EvaluatePbrForBackward(fd, fd.baseColor, N, matMinus, fd.ao, worldPos, V);
     float gradMetallic = dot(dL_dC, (cPlus - cMinus) / max(matPlus.b - matMinus.b, CORE3D_PBR_LIGHTING_EPSILON));
 
-    return vec4(gradRoughness, gradMetallic, 0.0, 0.0);
+    return vec4(0.0, gradRoughness, gradMetallic, 0.0);
 }
 
 vec4 PbrBasicWithLRTexture(float depthBufferSample, FullGBufferData fd)
