@@ -107,9 +107,55 @@
             }
         },
         {
-            "displayName": "Default Deferred with Uv Output",
+            "displayName": "Default Deferred",
             "variantName": "OPAQUE_DF",
             "renderSlot": "CORE3D_RS_DM_DF_OPAQUE",
+            "renderSlotDefaultShader": true,
+            "vert": "3dshaders://shader/core3d_dm_fw.vert.spv",
+            "frag": "3dshaders://shader/core3d_dm_df.frag.spv",
+            "vertexInputDeclaration": "3dvertexinputdeclarations://core3d_dm_fw.shadervid",
+            "pipelineLayout": "3dpipelinelayouts://core3d_dm_fw.shaderpl",
+            "state": {
+                "rasterizationState": {
+                    "enableDepthClamp": false,
+                    "enableDepthBias": false,
+                    "enableRasterizerDiscard": false,
+                    "polygonMode": "fill",
+                    "cullModeFlags": "back",
+                    "frontFace": "counter_clockwise"
+                },
+                "depthStencilState": {
+                    "enableDepthTest": true,
+                    "enableDepthWrite": true,
+                    "enableDepthBoundsTest": false,
+                    "enableStencilTest": false,
+                    "depthCompareOp": "less_or_equal"
+                },
+                "colorBlendState": {
+                    "colorAttachments": [
+                        {
+                            "colorWriteMask": "r_bit|g_bit|b_bit|a_bit"
+                        },
+                        {
+                            "colorWriteMask": "r_bit|g_bit|b_bit|a_bit"
+                        },
+                        {
+                            "colorWriteMask": "r_bit|g_bit|b_bit|a_bit"
+                        },
+                        {
+                            "colorWriteMask": "r_bit|g_bit|b_bit|a_bit"
+                        },
+                        {
+                            "colorWriteMask": "r_bit|g_bit|b_bit|a_bit"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "displayName": "Default Deferred with Uv Output",
+            "variantName": "OPAQUE_DF_UV",
+            "renderSlot": "CORE3D_RS_DM_DF_OPAQUE_UV",
             "renderSlotDefaultShader": true,
             "vert": "3dshaders://shader/core3d_dm_fw.vert.spv",
             "frag": "pt://shaders/shader/core3d_dm_df_uv.frag.spv",

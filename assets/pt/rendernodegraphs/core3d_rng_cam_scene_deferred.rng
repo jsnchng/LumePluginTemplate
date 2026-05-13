@@ -9,7 +9,7 @@
             "typeName": "RenderNodeMaskUbo",
             "nodeName": "MASK_UBO_NODE",
             "custom": {
-                "maskValue": 16,
+                "maskValue": 2,
                 "bufferShareName": "mask_ubo_buffer"
             }
         },
@@ -268,6 +268,7 @@
                 "index": 0
             },
             "renderSlot": "CORE3D_RS_DM_DF_OPAQUE",
+            "shaderRenderSlot": "CORE3D_RS_DM_DF_OPAQUE_UV",
             "renderSlotSortType": "by_material",
             "renderSlotCullType": "view_frustum_cull",
             "nodeFlags": 0,
