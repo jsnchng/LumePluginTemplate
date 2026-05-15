@@ -6,6 +6,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 #
+# Copy LumeAssetCompiler.exe
+#
+if(NOT EXISTS "${CMAKE_BINARY_DIR}/LumeAssetCompiler.exe")
+  file(COPY
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/LumeAssetCompiler.exe"
+    DESTINATION "${CMAKE_BINARY_DIR}")
+endif()
+
+#
 # Target: AGPBaseAPI
 #
 if(NOT TARGET AGPBase::AGPBaseAPI)
@@ -96,6 +105,9 @@ target_compile_definitions(PluginLumePT PRIVATE LUME3D_RENDER_NODE_SCENE_UTIL_H=
 target_compile_definitions(PluginLumePT PRIVATE CORE_PLUGIN=1)
 target_compile_options(PluginLumePT PRIVATE /GR-)
 
+#
+# Target: PTCompileShaders
+#
 set(shader_compiler_executable "${CMAKE_BINARY_DIR}/LumeShaderCompiler.exe")
 set(argument_list)
 # Comment out next line for RenderDoc debugging
@@ -103,7 +115,8 @@ set(argument_list)
 list(APPEND argument_list "--source")
 list(APPEND argument_list "${CMAKE_CURRENT_SOURCE_DIR}/assets/pt/shaders")
 list(APPEND argument_list "--destination")
-list(APPEND argument_list "${CMAKE_BINARY_DIR}/$<CONFIG>/app/assets/pt/shaders")
+list(APPEND argument_list "${CMAKE_CURRENT_SOURCE_DIR}/assets/pt/shaders")
+#list(APPEND argument_list "${CMAKE_BINARY_DIR}/$<CONFIG>/app/assets/pt/shaders")
 list(APPEND argument_list "--include")
 list(APPEND argument_list "${RENDER_DIR}/api")
 list(APPEND argument_list "--include")
@@ -116,4 +129,43 @@ list(APPEND argument_list "--check-if-changed")
 add_custom_target(PTCompileShaders ALL
   COMMAND ${shader_compiler_executable} ${argument_list}
   COMMAND_EXPAND_LISTS)
-add_dependencies(PluginLumePT PTCompileShaders)
+
+#
+# Target: PTCompileAssets
+#
+set(asset_compiler_executable "${CMAKE_BINARY_DIR}/LumeAssetCompiler.exe")
+# PTCompileAssets
+# PluginLumePT
+# "${CMAKE_CURRENT_SOURCE_DIR}/assets/pt"
+# "/"
+# "PARTICLES_BIN"
+# "PARTICLES_BIN_SIZE"
+# "particlerofs"
+
+function(build_rofs target_name dependant_name asset_path root bin_name size_name base_name)
+    set(asset_compiler_executable "${CMAKE_BINARY_DIR}/LumeAssetCompiler.exe")
+    set(output_files ${CMAKE_BINARY_DIR}/${base_name}_64.obj)
+    set(output_tmp_files ${CMAKE_BINARY_DIR}/${base_name}__temp_64.obj)
+    set(arch_flag "-x64")
+
+    add_custom_target("${target_name}" ALL
+        COMMAND ${asset_compiler_executable}
+            -windows
+            ${arch_flag}
+            "-extensions" "\".spv;.json;.lsb;.shader;.shadergs;.shadervid;.shaderpl;.rng;.gl;.gles\""
+            ${asset_path} ${root} ${bin_name} ${size_name} "${base_name}__temp"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${output_tmp_files} ${output_files}
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
+
+    set_source_files_properties(${output_files} PROPERTIES
+        GENERATED TRUE
+        EXTERNAL_OBJECT TRUE
+    )
+
+    target_sources(${dependant_name} PRIVATE ${output_files})
+endfunction()
+build_rofs(PTCompileAssets PluginLumePT "${CMAKE_CURRENT_SOURCE_DIR}/assets/pt" "/" "PT_BINARY" "PT_BIN_SIZE" "pt")
+
+add_dependencies(PTCompileAssets PTCompileShaders)
+add_dependencies(PluginLumePT PTCompileAssets)

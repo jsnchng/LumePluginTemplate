@@ -21,10 +21,19 @@
 PT_BEGIN_NAMESPACE()
 const char* GetVersionInfo() { return "GIT_REVISION: cf4cfcb"; }
 
+extern "C" const void* const PT_BINARY[];
+extern "C" const uint64_t PT_BIN_SIZE;
+
 CORE_NS::PluginToken CreatePluginPT(RENDER_NS::IRenderContext& context)
 {
+    std::cout << "CORE_NS::PluginToken CreatePluginPT" << std::endl;
     CORE_NS::IFileManager& fileManager = context.GetEngine().GetFileManager();
-    fileManager.RegisterPath("pt", "assets://pt/", false);
+
+    auto rofs = fileManager.CreateROFilesystem(PT_BINARY, PT_BIN_SIZE);
+
+    fileManager.RegisterFilesystem("pt", move(rofs));
+
+    // fileManager.RegisterPath("pt", "assets://pt/", false);
     {
         RENDER_NS::IShaderManager::ShaderFilePathDesc desc;
         desc.shaderPath = "pt://shaders/";
@@ -75,6 +84,7 @@ constexpr CORE_NS::SystemTypeInfo CAMERA_CONTROL_SYSTEM_TYPE_INFO {
 
 CORE_NS::PluginToken RegisterInterfaces(CORE_NS::IPluginRegister& pluginRegistry)
 {
+    std::cout << "CORE_NS::PluginToken RegisterInterfaces" << std::endl;
     pluginRegistry.RegisterTypeInfo(RENDER_PLUGIN);
     // Register custom render nodes
     for (const auto& info : PT_RENDER_NODE_TYPE_INFOS) {

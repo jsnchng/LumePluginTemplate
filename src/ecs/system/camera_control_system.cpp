@@ -127,8 +127,6 @@ void CameraControlSystem::FindMainCamera()
 
 bool CameraControlSystem::Update(bool isFrameRenderingQueued, uint64_t time, uint64_t delta)
 {
-    std::cout << "CameraControlSystem::Update" << std::endl;
-    
     if (!EntityUtil::IsValid(config_.targetCamera)) {
         FindMainCamera();
         if (!EntityUtil::IsValid(config_.targetCamera)) {
