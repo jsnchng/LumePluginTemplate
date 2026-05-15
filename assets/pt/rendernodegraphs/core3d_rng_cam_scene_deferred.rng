@@ -40,13 +40,6 @@
             "nodeName": "RenderNodeCreateDefaultCameraGpuImages",
             "gpuImageDescs": [
                 {
-                    "name": "output",
-                    "shareName": "output",
-                    "format": "b10g11r11_ufloat_pack32",
-                    "usageFlags": "color_attachment | input_attachment | sampled",
-                    "engineCreationFlags": "dynamic_barriers"
-                },
-                {
                     "name": "depth",
                     "shareName": "depth",
                     "format": "d32_sfloat",
