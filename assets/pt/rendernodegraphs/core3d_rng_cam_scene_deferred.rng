@@ -9,7 +9,7 @@
             "typeName": "RenderNodeMaskUbo",
             "nodeName": "MASK_UBO_NODE",
             "custom": {
-                "maskValue": 2,
+                "maskValue": 1,
                 "bufferShareName": "mask_ubo_buffer"
             }
         },

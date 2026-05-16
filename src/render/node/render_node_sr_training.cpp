@@ -26,10 +26,16 @@
 #include <render/nodecontext/intf_render_node_util.h>
 #include <render/resource_handle.h>
 
-// #include "util/log.h"
-// Temporarily disable PLUGIN_LOG and CORE_LOG due to crash issue
-#define PLUGIN_LOG_I(...) do {} while (0)
-#define PLUGIN_LOG_W(...) do {} while (0)
+#include <iostream>
+
+#define SR_LOG_ONCE(message)            \
+    do {                                \
+        static bool logged = false;     \
+        if (!logged) {                  \
+            std::cout << message << '\n'; \
+            logged = true;              \
+        }                               \
+    } while (0)
 
 using namespace BASE_NS;
 using namespace RENDER_NS;
@@ -57,7 +63,7 @@ void RenderNodeSRTraining::InitNode(IRenderNodeContextManager& renderNodeContext
     CreatePsos();
     
     valid_ = true;
-    PLUGIN_LOG_I("RenderNodeSRTraining: Initialized");
+    SR_LOG_ONCE("RenderNodeSRTraining: Initialized");
 }
 
 void RenderNodeSRTraining::PreExecuteFrame()
@@ -130,7 +136,7 @@ void RenderNodeSRTraining::CreatePsos()
             const auto& binds = pl.descriptorSetLayouts[localSetIdx].bindings;
             differentiableRenderBinder_ = dSetMgr.CreateDescriptorSetBinder(dSetMgr.CreateDescriptorSet(binds), binds);
             
-            PLUGIN_LOG_I("RenderNodeSRTraining: Differentiable render shader loaded");
+            SR_LOG_ONCE("RenderNodeSRTraining: Differentiable render shader loaded");
         }
     }
     
@@ -145,7 +151,7 @@ void RenderNodeSRTraining::CreatePsos()
             const auto& binds = pl.descriptorSetLayouts[localSetIdx].bindings;
             adamBinder_ = dSetMgr.CreateDescriptorSetBinder(dSetMgr.CreateDescriptorSet(binds), binds);
             
-            PLUGIN_LOG_I("RenderNodeSRTraining: Adam optimizer shader loaded");
+            SR_LOG_ONCE("RenderNodeSRTraining: Adam optimizer shader loaded");
         }
     }
 }
@@ -153,17 +159,32 @@ void RenderNodeSRTraining::CreatePsos()
 void RenderNodeSRTraining::ExecuteFrame(IRenderCommandList& cmdList)
 {
     if (!valid_ || !config_.enabled) {
+        SR_LOG_ONCE("RenderNodeSRTraining: disabled or invalid, skipping");
         return;
     }
     
     // Check resources
-    if (!RenderHandleUtil::IsValid(depthBuffer_) || !RenderHandleUtil::IsValid(uvBuffer_) ||
+    const bool missingResource =
+        !RenderHandleUtil::IsValid(depthBuffer_) || !RenderHandleUtil::IsValid(uvBuffer_) ||
         !RenderHandleUtil::IsValid(lrTexture_) || !RenderHandleUtil::IsValid(lrGradient_) ||
         !RenderHandleUtil::IsValid(lrGradientSsbo_) || !RenderHandleUtil::IsValid(lrMomentum1_) ||
         !RenderHandleUtil::IsValid(lrMomentum2_) || !RenderHandleUtil::IsValid(predictedColorOutput_) ||
         !RenderHandleUtil::IsValid(predictedBaseColor_) || !RenderHandleUtil::IsValid(dLossDSampledTexture_) ||
-        !RenderHandleUtil::IsValid(sampler_)) {
-        PLUGIN_LOG_W("RenderNodeSRTraining: Missing resources, skipping frame");
+        !RenderHandleUtil::IsValid(sampler_);
+    if (missingResource) {
+        SR_LOG_ONCE(
+            "RenderNodeSRTraining: missing resources, skipping. "
+            "depth=" << RenderHandleUtil::IsValid(depthBuffer_) <<
+            " uv=" << RenderHandleUtil::IsValid(uvBuffer_) <<
+            " lrTexture=" << RenderHandleUtil::IsValid(lrTexture_) <<
+            " lrGradient=" << RenderHandleUtil::IsValid(lrGradient_) <<
+            " lrGradientSsbo=" << RenderHandleUtil::IsValid(lrGradientSsbo_) <<
+            " momentum1=" << RenderHandleUtil::IsValid(lrMomentum1_) <<
+            " momentum2=" << RenderHandleUtil::IsValid(lrMomentum2_) <<
+            " predictedColor=" << RenderHandleUtil::IsValid(predictedColorOutput_) <<
+            " predictedBaseColor=" << RenderHandleUtil::IsValid(predictedBaseColor_) <<
+            " dLoss=" << RenderHandleUtil::IsValid(dLossDSampledTexture_) <<
+            " sampler=" << RenderHandleUtil::IsValid(sampler_));
         return;
     }
 

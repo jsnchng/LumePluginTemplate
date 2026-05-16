@@ -70,10 +70,10 @@ void RenderNodeSRClearGradient::InitNode(IRenderNodeContextManager& renderNodeCo
     lrWidth_ = gradientDesc.width;
     lrHeight_ = gradientDesc.height;
 
-    const uint32_t gradientSsboByteSize = lrWidth_ * lrHeight_ * 4u * static_cast<uint32_t>(sizeof(float));
+    const uint32_t gradientSsboByteSize = lrWidth_ * lrHeight_ * 4u * static_cast<uint32_t>(sizeof(int32_t));
     lrGradientSsbo_ = renderNodeContextMgr.GetGpuResourceManager().Create(LR_GRADIENT_SSBO_NAME,
-        GpuBufferDesc { CORE_BUFFER_USAGE_STORAGE_BUFFER_BIT, CORE_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0u,
-            gradientSsboByteSize });
+        GpuBufferDesc { CORE_BUFFER_USAGE_STORAGE_BUFFER_BIT, CORE_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            CORE_ENGINE_BUFFER_CREATION_DYNAMIC_BARRIERS, gradientSsboByteSize });
     
     // Get GT dimensions from loss output
     if (RenderHandleUtil::IsValid(lossOutput_)) {
@@ -171,7 +171,7 @@ void RenderNodeSRClearGradient::ExecuteFrame(IRenderCommandList& cmdList)
         uint32_t gtHeight;
     } pc;
     
-    pc.shouldClearBuffers = viewSwitched_ ? 1u : 0u;
+    pc.shouldClearBuffers = (viewSwitched_ || firstFrame_) ? 1u : 0u;
     pc.gtWidth = gtWidth_;
     pc.gtHeight = gtHeight_;
     
@@ -183,10 +183,12 @@ void RenderNodeSRClearGradient::ExecuteFrame(IRenderCommandList& cmdList)
     const uint32_t groupX = (dispatchWidth + threadGroupSize_.x - 1u) / threadGroupSize_.x;
     const uint32_t groupY = (dispatchHeight + threadGroupSize_.y - 1u) / threadGroupSize_.y;
     cmdList.Dispatch(groupX, groupY, 1u);
+    cmdList.AddCustomBarrierPoint();
     
     // Reset flag after use
-    if (viewSwitched_) {
+    if (viewSwitched_ || firstFrame_) {
         viewSwitched_ = false;
+        firstFrame_ = false;
         PLUGIN_LOG_I("RenderNodeSRClearGradient: Buffers cleared via shader");
     }
 }

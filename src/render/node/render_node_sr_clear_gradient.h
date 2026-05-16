@@ -70,6 +70,7 @@ private:
     
     // View switch flag (set in PreExecuteFrame, used in ExecuteFrame)
     bool viewSwitched_ { false };
+    bool firstFrame_ { true };
     
     // Image dimensions for dispatch
     uint32_t gtWidth_ { 1024 };
